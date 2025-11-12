@@ -1,0 +1,310 @@
+Project one-pager: Japanese Calligraphy → Sound (stroke-by-stroke)
+Vision (v1)
+
+While writing a kanji, the system generates audio that reflects stroke order and motion so the user can learn and recall the character “by its sound.” Each stroke becomes a recognizable sonic gesture; the complete kanji “plays” like a short motif.
+
+Why this is feasible
+
+Hoff (DAFx-18) already showed that kanji gestures can drive sound using Leap Motion/Wacom and two mapping modes—metaphorical (meaning-based) and objective (gesture-based). We’ll focus on objective mappings for real-time feedback and recognizability. 
+Jullian Hoff
+
+Apple Pencil exposes rich per-point data (x, y, force, azimuth, altitude, timestamp) via PencilKit (PKStrokePoint/PKDrawing). We can record these and sonify offline now, and stream live later. 
+Apple Developer
++4
+Apple Developer
++4
+Apple Developer
++4
+
+For sound, we can start with procedural synthesis (clean, controllable) or MIDI to any DAW; Python stacks like pyo (synthesis), mido (MIDI), and python-osc (to route into Max/Ableton/etc.) are stable and well-documented. 
+python-osc.readthedocs.io
++9
+belangeo.github.io
++9
+olivier.ajaxsoundstudio.com
++9
+
+Key concepts (short)
+
+Objective sonification (our v1): sound reflects motion features (position, speed, pressure, direction, curvature). This is what Hoff used his additive engine for—neutral, comparable, and responsive. 
+Jullian Hoff
+
+Granular vs. Additive (terminology):
+
+Granular = manipulate tiny grains of recorded audio (great for metaphorical “fire/water/bird” textures).
+
+Additive = sum controllable sine partials (great for clean, analytical motion-to-sound).
+We’ll prioritize procedural/additive-style control first, then experiment later. (Background from Hoff; general synthesis practice.) 
+Jullian Hoff
+
+Architectural blueprint (modular, swappable)
+[Input] → [Stroke Capture] → [Feature Extraction] → [Sonifier API] → [Audio I/O]
+                                  ↑                                ↑
+                             Mapping presets                 Engines (Additive, MIDI, FM, etc.)
+
+
+Stroke Capture (now: file; later: live): unified event schema of points
+StrokePoint { x, y, force, azimuth, altitude, t } (from PencilKit). 
+Apple Developer
+
+Feature Extraction (derived): instantaneous velocity, direction, curvature, stroke duration, pause times, stroke index.
+
+Sonifier API (plug-in interface):
+
+class Sonifier:
+    def begin_kanji(self, meta): ...
+    def start_stroke(self, features): ...
+    def update(self, point, features): ...
+    def end_stroke(self): ...
+    def end_kanji(self): ...
+
+
+Audio I/O options:
+
+pyo for synthesis (Sine/Blit/ButLP/Adsr etc.). 
+belangeo.github.io
+
+mido for MIDI out to FL Studio/Ableton instruments. 
+mido.readthedocs.io
+
+python-osc to route into Max/MSP, SuperCollider, or Ableton via OSC. 
+python-osc.readthedocs.io
+
+Abstraction lets us iterate quickly on mappings and engines without rewriting capture or feature code.
+
+Recommended v1 mappings (intuitive + memorable)
+
+Primary voice (melodic, for recognizability)
+
+Pitch ← Y (higher on screen → higher pitch). (Keep this stable across experiments.)
+
+Amplitude ← pressure (heavier pressure → louder).
+
+Vibrato depth/rate ← instantaneous speed (faster → more modulation).
+
+Stereo pan ← X (left/right spatial cue).
+
+Stroke-level structure
+
+Stroke boundaries (pen up/down) → note boundaries.
+
+Stroke index (1,2,3,...) → tiny timbral shifts (e.g., partial mix or subtle per-stroke envelope shape) so order is audible.
+
+Kanji-level structure
+
+Fixed tempo grid that advances with horizontal progression; brief rests for inter-stroke pauses.
+
+These choices align with gestural transparency highlighted by Hoff (audience can “hear” the motion they see). 
+Jullian Hoff
+
+Data contracts (for Cursor to implement)
+
+Input JSON (one drawing)
+
+{
+  "canvas": {"width": 2048, "height": 1536, "ppi": 264},
+  "strokes": [
+    {
+      "id": 1,
+      "points": [
+        {"x": 1023.2, "y": 410.7, "force": 0.55, "azimuth": 0.61, "altitude": 1.05, "t": 0.000},
+        {"x": 1024.9, "y": 418.2, "force": 0.60, "azimuth": 0.62, "altitude": 1.04, "t": 0.016}
+      ]
+    }
+  ]
+}
+
+
+Derived features (computed per point & per stroke)
+
+{
+  "stroke_id": 1,
+  "duration_s": 0.72,
+  "mean_speed": 0.42,
+  "mean_pressure": 0.58,
+  "dominant_direction": "down",
+  "curvature_mean": 0.11,
+  "points": [
+    {"t":0.000, "xN":0.50, "yN":0.27, "speed":0.05, "dir_deg":-90, "curv":0.01},
+    {"t":0.016, "xN":0.51, "yN":0.28, "speed":0.08, "dir_deg":-93, "curv":0.02}
+  ]
+}
+
+Folder layout (backend prototype)
+sonify/
+  io/
+    load_pencilkit.py         # parse PKDrawing JSON export
+    save_features.py
+  features/
+    kinematics.py             # vel/accel/curvature, stroke segmentation
+    normalize.py
+  mapping/
+    pitch_maps.py             # y→pitch, optional x contribution
+    dynamics_maps.py          # force/speed → amp/mod
+  engines/
+    additive_pyo.py           # pyo-based oscillator graph
+    midi_mido.py              # MIDI note/CC sender
+    osc_client.py             # python-osc to Max/SC/Ableton
+    base.py                   # Sonifier interface
+  pipeline/
+    render_offline.py         # read JSON → features → audio/MIDI
+    audition_live.py          # (later) stream & monitor
+  tests/
+    test_features.py
+
+Implementation roadmap (order matters)
+
+Phase 0 — Groundwork (today)
+
+Spec the schema above and write a small loader for recorded PencilKit JSON. (Later, we’ll write the iPad logger; for now assume JSON exists.) 
+Apple Developer
+
+Implement feature extraction (velocity, direction, curvature, stroke segmentation, normalization).
+
+Phase 1 — Minimum audible demo
+3) Build AdditiveSonifier (pyo) with one voice:
+
+pitch = mapY(yN) in a fixed range (e.g., A3–A5).
+
+amp = mapForce(force) with limiter.
+
+pan = mapX(xN).
+
+vibrato = mapSpeed(speed). 
+belangeo.github.io
+
+Create render_offline.py: load one kanji JSON → render WAV (or play in real time).
+
+Phase 2 — Stroke order encoding
+5) Add stroke boundary events: per-stroke ADSR or quick percussive onset to mark order.
+6) Add stroke index coloration (e.g., mix of partials per stroke number).
+7) Export MIDI (notes per stroke + CC for pressure) to test multiple timbres in a DAW. 
+mido.readthedocs.io
+
+Phase 3 — A/B mappings for memorability
+8) Implement Mapping Presets (config files):
+
+Preset A: Pitch ← Y, Pan ← X, Amp ← Force, Vib ← Speed.
+
+Preset B: Pitch ← Y + 0.1·X, Timbre ← Curvature, etc.
+
+Add batch renderer + quick listening UI to compare presets on the same kanji set.
+
+Phase 4 — Live pathfinder (scaffold only)
+10) Add OSC sink so a future iPad/desktop client can stream live points to the same engine. (No UI yet—just a server & handler.) 
+python-osc.readthedocs.io
+
+Phase 5 — Evaluation hooks
+11) Logging: save per-kanji audio and a short “stroke-ear training” quiz scaffold to test recognizability (can people ID the kanji from audio?).
+
+What’s explicitly out of scope (for v1)
+
+Metaphorical/semantic sample synthesis (granular birds/fire/water). That’s v2+ (requires curated sample banks and different mapping logic). (Hoff’s metaphorical mode.) 
+Jullian Hoff
+
+Full iPad live app (we’ll prototype logging later; for now consume exported PencilKit JSON). 
+Apple Developer
+
+Machine-learned mappings (DDSP/NNs); first we validate human-interpretable mappings.
+
+Automatic kanji recognition or correctness scoring; v1 is for sonic memory, not grading.
+
+Risk notes & mitigations
+
+Noisy X jitters → pitch wobble: lock pitch to Y primarily; low-pass filter Y before mapping; keep any X→pitch term small (≤0.1).
+
+Clipping/loudness: global limiter in pyo; conservative per-partial gains. 
+belangeo.github.io
+
+Timing consistency (offline render): use recorded timestamps; resample to fixed audio rate; stroke onsets quantized lightly so order cues pop.
+
+Concrete resources for Cursor
+Core references
+
+Hoff, “Sonification of Japanese Calligraphy…” (DAFx-18, 2018) — two modes (metaphorical vs objective), Leap vs Wacom capture, mapping with Libmapper/Max/Ableton. Great conceptual grounding. 
+Jullian Hoff
+
+Apple Pencil / PencilKit (PKDrawing, PKStrokePoint, properties) — official docs for force, azimuth, altitude, timeOffset, and dataRepresentation for saving strokes. 
+Apple Developer
++4
+Apple Developer
++4
+Apple Developer
++4
+
+Audio tooling (Python)
+
+pyo docs & paper (procedural synthesis in Python). 
+belangeo.github.io
++1
+
+mido docs (MIDI in Python). 
+mido.readthedocs.io
++1
+
+python-osc docs/PDF (OSC client/server). 
+python-osc.readthedocs.io
++1
+
+Background (optional reading)
+
+Procedural/real-time audio overview (recent review). 
+QMUL - Electrical Engineering & Computer Science
+
+Developer checklists
+Feature extraction (kinematics)
+
+ Normalize (x,y) to [0,1] using canvas bounds.
+
+ Compute speed v = hypot(dx,dy)/dt; smooth with EMA.
+
+ Direction θ = atan2(dy,dx); quantize to 8 bins if needed for “directional motifs.”
+
+ Curvature via change of direction per unit length.
+
+ Segment strokes: pen-down/pen-up from PencilKit strokes.
+
+Sonifier (additive baseline in pyo)
+
+ Boot server before building graph; stop on exit. 
+DEV Community
+
+ One oscillator voice per active stroke; or single voice updated by current stroke.
+
+ Map: pitch = lerp(220, 880, 1 - yN), amp = clamp(force*k), pan = (xN*2-1), vib = speed→(depth,rate).
+
+ Short attack on stroke start; audible “tick” optional to encode order.
+
+ Hard limiter + soft clip to avoid spikes.
+
+MIDI engine (mido)
+
+ On stroke start: note_on with pitch from first point; CCs for pressure/speed over time; note_off at stroke end. 
+mido.readthedocs.io
+
+Configurable mapping presets
+
+ YAML/JSON with scalar weights & ranges (e.g., pitch_y_weight, pitch_x_weight, vib_depth_max).
+
+ Hot-reload to A/B while auditioning.
+
+Quick pseudocode (offline render)
+strokes = load_pencilkit_json(path)      # io/load_pencilkit.py
+feat = extract_features(strokes)         # features/kinematics.py
+
+son = AdditiveSonifier(config="presets/a.json")  # engines/additive_pyo.py
+son.begin_kanji({"id": "水"})
+for s in feat.strokes:
+    son.start_stroke(s.summary)
+    for pt in s.points:
+        son.update(pt, pt.features)
+    son.end_stroke()
+son.end_kanji()
+
+Success criteria for v1
+
+Given a small set of beginner kanji (e.g., 川, 山, 水, 火, 木), listeners can identify at least 60–70% correctly by audio alone after a few exposures (ear-training effect).
+
+Stroke order is audibly unambiguous (onsets and per-stroke timbre tags are clear).
+
+The same kanji drawn differently still sounds recognizably similar (mapping is robust).
