@@ -1,0 +1,55 @@
+{
+  "canvas": {
+    "width": 1024,
+    "height": 1024,
+    "ppi": 264
+  },
+  "metadata": {
+    "id": "水",
+    "meaning": "water",
+    "strokes": 4
+  },
+  "strokes": [
+    {
+      "id": 1,
+      "points": [
+        {"x": 512, "y": 200, "force": 0.5, "azimuth": 0.0, "altitude": 1.2, "t": 0.000},
+        {"x": 512, "y": 250, "force": 0.6, "azimuth": 0.0, "altitude": 1.2, "t": 0.050},
+        {"x": 512, "y": 300, "force": 0.65, "azimuth": 0.0, "altitude": 1.2, "t": 0.100},
+        {"x": 512, "y": 350, "force": 0.6, "azimuth": 0.0, "altitude": 1.2, "t": 0.150},
+        {"x": 512, "y": 400, "force": 0.5, "azimuth": 0.0, "altitude": 1.2, "t": 0.200}
+      ]
+    },
+    {
+      "id": 2,
+      "points": [
+        {"x": 300, "y": 500, "force": 0.45, "azimuth": 0.3, "altitude": 1.1, "t": 0.400},
+        {"x": 350, "y": 520, "force": 0.55, "azimuth": 0.3, "altitude": 1.1, "t": 0.450},
+        {"x": 400, "y": 540, "force": 0.6, "azimuth": 0.3, "altitude": 1.1, "t": 0.500},
+        {"x": 450, "y": 560, "force": 0.55, "azimuth": 0.3, "altitude": 1.1, "t": 0.550},
+        {"x": 500, "y": 580, "force": 0.5, "azimuth": 0.3, "altitude": 1.1, "t": 0.600}
+      ]
+    },
+    {
+      "id": 3,
+      "points": [
+        {"x": 350, "y": 650, "force": 0.5, "azimuth": 0.0, "altitude": 1.15, "t": 0.800},
+        {"x": 380, "y": 680, "force": 0.6, "azimuth": 0.2, "altitude": 1.15, "t": 0.850},
+        {"x": 420, "y": 710, "force": 0.65, "azimuth": 0.3, "altitude": 1.15, "t": 0.900},
+        {"x": 470, "y": 740, "force": 0.6, "azimuth": 0.4, "altitude": 1.15, "t": 0.950},
+        {"x": 520, "y": 760, "force": 0.5, "azimuth": 0.5, "altitude": 1.15, "t": 1.000}
+      ]
+    },
+    {
+      "id": 4,
+      "points": [
+        {"x": 600, "y": 650, "force": 0.5, "azimuth": -0.2, "altitude": 1.15, "t": 1.200},
+        {"x": 570, "y": 680, "force": 0.6, "azimuth": -0.3, "altitude": 1.15, "t": 1.250},
+        {"x": 540, "y": 710, "force": 0.65, "azimuth": -0.3, "altitude": 1.15, "t": 1.300},
+        {"x": 510, "y": 740, "force": 0.6, "azimuth": -0.4, "altitude": 1.15, "t": 1.350},
+        {"x": 490, "y": 760, "force": 0.5, "azimuth": -0.4, "altitude": 1.15, "t": 1.400}
+      ]
+    }
+  ]
+}
+

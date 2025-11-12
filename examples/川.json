@@ -1,0 +1,56 @@
+{
+  "canvas": {
+    "width": 1024,
+    "height": 1024,
+    "ppi": 264
+  },
+  "metadata": {
+    "id": "川",
+    "meaning": "river",
+    "strokes": 3
+  },
+  "strokes": [
+    {
+      "id": 1,
+      "points": [
+        {"x": 300, "y": 300, "force": 0.5, "azimuth": 0.0, "altitude": 1.2, "t": 0.000},
+        {"x": 300, "y": 350, "force": 0.55, "azimuth": 0.0, "altitude": 1.2, "t": 0.040},
+        {"x": 300, "y": 400, "force": 0.6, "azimuth": 0.0, "altitude": 1.2, "t": 0.080},
+        {"x": 300, "y": 450, "force": 0.6, "azimuth": 0.0, "altitude": 1.2, "t": 0.120},
+        {"x": 300, "y": 500, "force": 0.6, "azimuth": 0.0, "altitude": 1.2, "t": 0.160},
+        {"x": 300, "y": 550, "force": 0.6, "azimuth": 0.0, "altitude": 1.2, "t": 0.200},
+        {"x": 300, "y": 600, "force": 0.55, "azimuth": 0.0, "altitude": 1.2, "t": 0.240},
+        {"x": 300, "y": 650, "force": 0.5, "azimuth": 0.0, "altitude": 1.2, "t": 0.280}
+      ]
+    },
+    {
+      "id": 2,
+      "points": [
+        {"x": 512, "y": 250, "force": 0.5, "azimuth": 0.0, "altitude": 1.2, "t": 0.480},
+        {"x": 512, "y": 300, "force": 0.55, "azimuth": 0.0, "altitude": 1.2, "t": 0.520},
+        {"x": 512, "y": 350, "force": 0.6, "azimuth": 0.0, "altitude": 1.2, "t": 0.560},
+        {"x": 512, "y": 400, "force": 0.65, "azimuth": 0.0, "altitude": 1.2, "t": 0.600},
+        {"x": 512, "y": 450, "force": 0.65, "azimuth": 0.0, "altitude": 1.2, "t": 0.640},
+        {"x": 512, "y": 500, "force": 0.65, "azimuth": 0.0, "altitude": 1.2, "t": 0.680},
+        {"x": 512, "y": 550, "force": 0.6, "azimuth": 0.0, "altitude": 1.2, "t": 0.720},
+        {"x": 512, "y": 600, "force": 0.6, "azimuth": 0.0, "altitude": 1.2, "t": 0.760},
+        {"x": 512, "y": 650, "force": 0.55, "azimuth": 0.0, "altitude": 1.2, "t": 0.800},
+        {"x": 512, "y": 700, "force": 0.5, "azimuth": 0.0, "altitude": 1.2, "t": 0.840}
+      ]
+    },
+    {
+      "id": 3,
+      "points": [
+        {"x": 724, "y": 300, "force": 0.5, "azimuth": 0.0, "altitude": 1.2, "t": 1.040},
+        {"x": 724, "y": 350, "force": 0.55, "azimuth": 0.0, "altitude": 1.2, "t": 1.080},
+        {"x": 724, "y": 400, "force": 0.6, "azimuth": 0.0, "altitude": 1.2, "t": 1.120},
+        {"x": 724, "y": 450, "force": 0.6, "azimuth": 0.0, "altitude": 1.2, "t": 1.160},
+        {"x": 724, "y": 500, "force": 0.6, "azimuth": 0.0, "altitude": 1.2, "t": 1.200},
+        {"x": 724, "y": 550, "force": 0.6, "azimuth": 0.0, "altitude": 1.2, "t": 1.240},
+        {"x": 724, "y": 600, "force": 0.55, "azimuth": 0.0, "altitude": 1.2, "t": 1.280},
+        {"x": 724, "y": 650, "force": 0.5, "azimuth": 0.0, "altitude": 1.2, "t": 1.320}
+      ]
+    }
+  ]
+}
+

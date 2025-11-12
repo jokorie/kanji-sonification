@@ -1,0 +1,123 @@
+{
+  "canvas": {
+    "width": 1024,
+    "height": 1024,
+    "ppi": 264
+  },
+  "metadata": {
+    "id": "一",
+    "meaning": "one",
+    "strokes": 1
+  },
+  "strokes": [
+    {
+      "id": 1,
+      "points": [
+        {
+          "x": 200,
+          "y": 512,
+          "force": 0.4,
+          "azimuth": 0.5,
+          "altitude": 1.2,
+          "t": 0.0
+        },
+        {
+          "x": 250,
+          "y": 512,
+          "force": 0.5,
+          "azimuth": 0.5,
+          "altitude": 1.2,
+          "t": 0.05
+        },
+        {
+          "x": 300,
+          "y": 512,
+          "force": 0.55,
+          "azimuth": 0.5,
+          "altitude": 1.2,
+          "t": 0.1
+        },
+        {
+          "x": 350,
+          "y": 512,
+          "force": 0.6,
+          "azimuth": 0.5,
+          "altitude": 1.2,
+          "t": 0.15
+        },
+        {
+          "x": 400,
+          "y": 512,
+          "force": 0.65,
+          "azimuth": 0.5,
+          "altitude": 1.2,
+          "t": 0.2
+        },
+        {
+          "x": 450,
+          "y": 512,
+          "force": 0.7,
+          "azimuth": 0.5,
+          "altitude": 1.2,
+          "t": 0.25
+        },
+        {
+          "x": 500,
+          "y": 512,
+          "force": 0.7,
+          "azimuth": 0.5,
+          "altitude": 1.2,
+          "t": 0.3
+        },
+        {
+          "x": 550,
+          "y": 512,
+          "force": 0.7,
+          "azimuth": 0.5,
+          "altitude": 1.2,
+          "t": 0.35
+        },
+        {
+          "x": 600,
+          "y": 512,
+          "force": 0.65,
+          "azimuth": 0.5,
+          "altitude": 1.2,
+          "t": 0.4
+        },
+        {
+          "x": 650,
+          "y": 512,
+          "force": 0.6,
+          "azimuth": 0.5,
+          "altitude": 1.2,
+          "t": 0.45
+        },
+        {
+          "x": 700,
+          "y": 512,
+          "force": 0.55,
+          "azimuth": 0.5,
+          "altitude": 1.2,
+          "t": 0.5
+        },
+        {
+          "x": 750,
+          "y": 512,
+          "force": 0.5,
+          "azimuth": 0.5,
+          "altitude": 1.2,
+          "t": 0.55
+        },
+        {
+          "x": 800,
+          "y": 512,
+          "force": 0.4,
+          "azimuth": 0.5,
+          "altitude": 1.2,
+          "t": 0.6
+        }
+      ]
+    }
+  ]
+}
