@@ -1,0 +1,19 @@
+# MIDI output preset
+# Generates MIDI file for use in DAWs
+
+engine: midi
+
+# Pitch range (converted to MIDI notes)
+min_freq: 220.0
+max_freq: 880.0
+
+# MIDI settings
+channel: 0
+tempo: 120 # BPM
+ticks_per_beat: 480
+
+# CC assignments
+cc_pressure: 11 # Expression
+cc_pan: 10 # Pan
+cc_brightness: 74 # Brightness/Filter
+

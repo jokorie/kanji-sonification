@@ -1,0 +1,26 @@
+# Default additive synthesis preset
+# Objective mapping: motion features → sound parameters
+
+engine: additive
+
+# Audio settings
+sample_rate: 44100
+buffer_size: 512
+
+# Pitch mapping (Y position)
+min_freq: 220.0 # A3
+max_freq: 880.0 # A5
+
+# Envelope
+attack: 0.01 # 10ms attack
+release: 0.05 # 50ms release
+
+# Dynamics
+gain: 0.3 # Global gain (0-1)
+
+# Speed-to-vibrato mapping
+max_speed: 1.0
+vibrato_depth: 8.0 # Max vibrato depth in Hz
+vibrato_min_rate: 3.0 # Min vibrato rate in Hz
+vibrato_max_rate: 7.0 # Max vibrato rate in Hz
+

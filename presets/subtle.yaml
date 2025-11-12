@@ -1,0 +1,23 @@
+# Subtle/gentle preset
+# Narrower pitch range and less vibrato
+
+engine: additive
+
+sample_rate: 44100
+buffer_size: 512
+
+# Narrow pitch range (one octave)
+min_freq: 330.0 # E4
+max_freq: 660.0 # E5
+
+# Smoother envelope
+attack: 0.02
+release: 0.1
+
+gain: 0.35
+
+# Minimal vibrato
+max_speed: 1.2
+vibrato_depth: 3.0
+vibrato_min_rate: 2.0
+vibrato_max_rate: 5.0

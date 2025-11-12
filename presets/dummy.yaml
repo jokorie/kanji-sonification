@@ -1,0 +1,4 @@
+# Dummy/test preset
+# Uses the dummy sonifier for testing without audio
+
+engine: dummy

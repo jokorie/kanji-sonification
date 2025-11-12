@@ -1,0 +1,23 @@
+# Wide pitch range preset
+# Exaggerated pitch range for more dramatic effect
+
+engine: additive
+
+sample_rate: 44100
+buffer_size: 512
+
+# Extended pitch range
+min_freq: 110.0 # A2 (one octave lower)
+max_freq: 1760.0 # A6 (two octaves higher)
+
+# Snappier envelope
+attack: 0.005
+release: 0.08
+
+gain: 0.25
+
+# More pronounced vibrato
+max_speed: 0.8
+vibrato_depth: 15.0
+vibrato_min_rate: 4.0
+vibrato_max_rate: 10.0
