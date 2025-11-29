@@ -10,6 +10,7 @@ python-osc>=1.8.3
 # Scientific computing for feature extraction
 numpy>=1.24.0
 scipy>=1.10.0
+matplotlib>=3.7.0
 
 # Configuration and data
 PyYAML>=6.0
