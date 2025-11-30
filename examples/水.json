@@ -43,11 +43,11 @@
     {
       "id": 4,
       "points": [
-        {"x": 600, "y": 650, "force": 0.5, "azimuth": -0.2, "altitude": 1.15, "t": 1.200},
-        {"x": 570, "y": 680, "force": 0.6, "azimuth": -0.3, "altitude": 1.15, "t": 1.250},
-        {"x": 540, "y": 710, "force": 0.65, "azimuth": -0.3, "altitude": 1.15, "t": 1.300},
-        {"x": 510, "y": 740, "force": 0.6, "azimuth": -0.4, "altitude": 1.15, "t": 1.350},
-        {"x": 490, "y": 760, "force": 0.5, "azimuth": -0.4, "altitude": 1.15, "t": 1.400}
+        {"x": 600, "y": 850, "force": 0.5, "azimuth": -0.2, "altitude": 1.15, "t": 1.200},
+        {"x": 570, "y": 880, "force": 0.6, "azimuth": -0.3, "altitude": 1.15, "t": 1.250},
+        {"x": 540, "y": 910, "force": 0.65, "azimuth": -0.3, "altitude": 1.15, "t": 1.300},
+        {"x": 510, "y": 940, "force": 0.6, "azimuth": -0.4, "altitude": 1.15, "t": 1.350},
+        {"x": 490, "y": 960, "force": 0.5, "azimuth": -0.4, "altitude": 1.15, "t": 1.400}
       ]
     }
   ]
