@@ -9,6 +9,8 @@ import { StreamingFeatureExtractor } from './features/kinematics';
 import { mapFeaturesToSynthParams } from './audio/mapping';
 import { KanjiSynth } from './audio/synth';
 import { CanvasInput } from './canvas/input';
+import { TemplatePlayer } from './templates/playback';
+import { getTemplate } from './templates/kanji-data';
 
 // ============================================================
 // APP STATE
@@ -17,6 +19,7 @@ import { CanvasInput } from './canvas/input';
 let synth: KanjiSynth;
 let featureExtractor: StreamingFeatureExtractor;
 let canvasInput: CanvasInput;
+let templatePlayer: TemplatePlayer;
 let pointCount = 0;
 let strokeSoundStarted = false; // Track if we've started sound for current stroke
 
@@ -27,6 +30,8 @@ let pointCountEl: HTMLElement;
 let pressureValueEl: HTMLElement;
 let pressureFill: HTMLElement;
 let frequencyValueEl: HTMLElement;
+let kanjiSelect: HTMLSelectElement;
+let playBtn: HTMLButtonElement;
 
 // ============================================================
 // INITIALIZATION
@@ -40,13 +45,58 @@ function initializeUI(): void {
   pressureValueEl = document.getElementById('pressureValue')!;
   pressureFill = document.getElementById('pressureFill')!;
   frequencyValueEl = document.getElementById('frequencyValue')!;
+  kanjiSelect = document.getElementById('kanjiSelect') as HTMLSelectElement;
+  playBtn = document.getElementById('playBtn') as HTMLButtonElement;
 
   // Clear button
   const clearBtn = document.getElementById('clearBtn')!;
   clearBtn.addEventListener('click', () => {
-    canvasInput.clear();
     pointCount = 0;
     pointCountEl.textContent = '0';
+    // Clear and redraw the guide for currently selected kanji
+    updateKanjiGuide();
+  });
+
+  // Update guide when kanji selection changes
+  kanjiSelect.addEventListener('change', () => {
+    updateKanjiGuide();
+  });
+
+  // Play template button
+  playBtn.addEventListener('click', async () => {
+    if (templatePlayer.playing) {
+      templatePlayer.stop();
+      playBtn.textContent = '▶ PLAY';
+      playBtn.classList.remove('playing');
+      statusDot.classList.remove('active');
+    } else {
+      const character = kanjiSelect.value;
+      playBtn.textContent = '■ STOP';
+      playBtn.classList.add('playing');
+      
+      await templatePlayer.play(character, {
+        strokeDuration: 600,
+        strokePause: 300,
+        pressure: 0.6,
+        onStrokeStart: (i) => {
+          statusDot.classList.add('active');
+          console.log(`Stroke ${i + 1} started`);
+        },
+        onStrokeEnd: (i) => {
+          statusDot.classList.remove('active');
+          console.log(`Stroke ${i + 1} ended`);
+        },
+        onPoint: (point) => {
+          frequencyValueEl.textContent = `${mapYToFreq(point.y).toFixed(0)}Hz`;
+        },
+        onComplete: () => {
+          playBtn.textContent = '▶ PLAY';
+          playBtn.classList.remove('playing');
+          statusDot.classList.remove('active');
+          console.log('Playback complete');
+        }
+      });
+    }
   });
 
   // Initialize synth on first interaction (required by browser autoplay policy)
@@ -64,6 +114,7 @@ function initializeUI(): void {
 function initializeSynth(): void {
   synth = new KanjiSynth(DEFAULT_SYNTH_CONFIG);
   featureExtractor = new StreamingFeatureExtractor(0.3);
+  templatePlayer = new TemplatePlayer(synth);
 }
 
 function initializeCanvas(): void {
@@ -131,6 +182,21 @@ function handlePoint(point: StrokePoint): void {
   }
 }
 
+/**
+ * Update the canvas guide to show the currently selected kanji
+ */
+function updateKanjiGuide(): void {
+  const character = kanjiSelect.value;
+  const template = getTemplate(character);
+  
+  if (template) {
+    canvasInput.clearAndDrawGuide(template.strokes);
+    console.log(`📝 Showing guide for: ${character} (${template.meaning})`);
+  } else {
+    canvasInput.clear();
+  }
+}
+
 // Helper functions for initial point (before features are available)
 function mapYToFreq(y: number): number {
   const minFreq = DEFAULT_SYNTH_CONFIG.minFreq;
@@ -156,6 +222,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initializeSynth();
   initializeCanvas();
   initializeUI();
+  
+  // Show initial kanji guide
+  updateKanjiGuide();
   
   console.log('✅ Ready! Tap "Enable Audio" to start.');
 });

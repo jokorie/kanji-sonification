@@ -170,6 +170,56 @@ export class CanvasInput {
   }
 
   /**
+   * Draw a template guide (faint stroke outline).
+   * 
+   * @param strokes - Array of strokes, each stroke is array of [x, y] points (0-1 normalized)
+   * @param color - CSS color for the guide (default: semi-transparent)
+   */
+  drawGuide(strokes: number[][][], color: string = 'rgba(201, 70, 61, 0.25)'): void {
+    const logicalWidth = (this.canvas as any).logicalWidth || this.canvas.clientWidth;
+    const logicalHeight = (this.canvas as any).logicalHeight || this.canvas.clientHeight;
+    
+    // Add padding so strokes don't touch edges
+    const padding = 0.1; // 10% padding on each side
+    const scale = 1 - (padding * 2);
+    const offsetX = padding * logicalWidth;
+    const offsetY = padding * logicalHeight;
+
+    this.ctx.strokeStyle = color;
+    this.ctx.lineWidth = 3;
+    this.ctx.lineCap = 'round';
+    this.ctx.lineJoin = 'round';
+
+    for (const stroke of strokes) {
+      if (stroke.length < 2) continue;
+
+      this.ctx.beginPath();
+      
+      // Move to first point
+      const startX = stroke[0][0] * logicalWidth * scale + offsetX;
+      const startY = stroke[0][1] * logicalHeight * scale + offsetY;
+      this.ctx.moveTo(startX, startY);
+
+      // Draw through remaining points
+      for (let i = 1; i < stroke.length; i++) {
+        const x = stroke[i][0] * logicalWidth * scale + offsetX;
+        const y = stroke[i][1] * logicalHeight * scale + offsetY;
+        this.ctx.lineTo(x, y);
+      }
+
+      this.ctx.stroke();
+    }
+  }
+
+  /**
+   * Clear and redraw with a guide.
+   */
+  clearAndDrawGuide(strokes: number[][][]): void {
+    this.clear();
+    this.drawGuide(strokes);
+  }
+
+  /**
    * Check if currently drawing.
    */
   get drawing(): boolean {

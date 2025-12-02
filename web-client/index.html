@@ -209,6 +209,52 @@
       transform: scale(0.98);
     }
 
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Template selector */
+    .template-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .kanji-select {
+      font-family: 'Noto Serif JP', serif;
+      font-size: 1.5rem;
+      padding: 6px 12px;
+      background: var(--bg-secondary);
+      border: 1px solid rgba(232, 228, 220, 0.15);
+      border-radius: 2px;
+      color: var(--ink);
+      cursor: pointer;
+      min-width: 60px;
+      text-align: center;
+    }
+
+    .kanji-select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .kanji-select option {
+      font-size: 1.2rem;
+      padding: 8px;
+    }
+
+    .play-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .play-btn.playing {
+      background: var(--accent);
+      color: var(--bg-primary);
+    }
+
     /* Pressure indicator */
     .pressure-bar {
       position: absolute;
@@ -337,7 +383,23 @@
         <span class="stat-value" id="frequencyValue">--</span>
       </div>
     </div>
-    <button id="clearBtn">CLEAR</button>
+    <div class="template-controls">
+      <select id="kanjiSelect" class="kanji-select">
+        <option value="一">一</option>
+        <option value="二">二</option>
+        <option value="三">三</option>
+        <option value="人">人</option>
+        <option value="大">大</option>
+        <option value="日">日</option>
+        <option value="月">月</option>
+        <option value="山">山</option>
+        <option value="川">川</option>
+        <option value="木">木</option>
+        <option value="火">火</option>
+      </select>
+      <button id="playBtn" class="play-btn">▶ PLAY</button>
+      <button id="clearBtn">CLEAR</button>
+    </div>
   </footer>
 
   <!-- Audio initialization modal (required due to browser autoplay policy) -->
