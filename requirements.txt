@@ -7,6 +7,9 @@ mido>=1.3.0
 # OSC communication
 python-osc>=1.8.3
 
+# WebSocket communication (for web-based input)
+websockets>=12.0
+
 # Scientific computing for feature extraction
 numpy>=1.24.0
 scipy>=1.10.0

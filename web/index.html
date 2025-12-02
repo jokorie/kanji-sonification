@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sonic Kanji</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;500&family=JetBrains+Mono:wght@300&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0d0d0d;
+            --bg-secondary: #1a1a1a;
+            --accent: #c9463d;
+            --accent-glow: rgba(201, 70, 61, 0.4);
+            --ink: #e8e4dc;
+            --ink-dim: rgba(232, 228, 220, 0.5);
+            --grid: rgba(232, 228, 220, 0.06);
+            --success: #4a9c6d;
+            --warning: #d4a84b;
+        }
+        
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            touch-action: none;
+            background: var(--bg-primary);
+            font-family: 'Noto Serif JP', serif;
+        }
+        
+        body {
+            display: flex;
+            flex-direction: column;
+            background: 
+                radial-gradient(ellipse at 50% 0%, rgba(201, 70, 61, 0.08) 0%, transparent 50%),
+                linear-gradient(180deg, var(--bg-primary) 0%, #0a0a0a 100%);
+        }
+        
+        /* Header */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+            border-bottom: 1px solid rgba(232, 228, 220, 0.08);
+            backdrop-filter: blur(8px);
+            z-index: 10;
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 300;
+            color: var(--ink);
+            letter-spacing: 0.1em;
+        }
+        
+        .logo span {
+            color: var(--accent);
+        }
+        
+        /* Status indicator */
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--ink-dim);
+            letter-spacing: 0.05em;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--warning);
+            box-shadow: 0 0 8px var(--warning);
+            transition: all 0.3s ease;
+        }
+        
+        .status-dot.connected {
+            background: var(--success);
+            box-shadow: 0 0 12px var(--success);
+        }
+        
+        .status-dot.active {
+            background: var(--accent);
+            box-shadow: 0 0 16px var(--accent-glow);
+            animation: pulse 0.8s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.7; }
+        }
+        
+        /* Canvas container */
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        
+        .canvas-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            aspect-ratio: 1;
+            max-height: calc(100vh - 180px);
+        }
+        
+        /* Grid overlay */
+        .grid-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.5;
+        }
+        
+        .grid-overlay::before,
+        .grid-overlay::after {
+            content: '';
+            position: absolute;
+            background: var(--grid);
+        }
+        
+        .grid-overlay::before {
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 1px;
+        }
+        
+        .grid-overlay::after {
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+        }
+        
+        /* Diagonal guides */
+        .grid-diag {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+        
+        .grid-diag::before,
+        .grid-diag::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border: 1px dashed var(--grid);
+        }
+        
+        .grid-diag::before {
+            transform: rotate(45deg) scale(1.414);
+            transform-origin: center;
+            width: 1px;
+            left: 50%;
+            border: none;
+            border-left: 1px dashed var(--grid);
+        }
+        
+        .grid-diag::after {
+            transform: rotate(-45deg) scale(1.414);
+            transform-origin: center;
+            width: 1px;
+            left: 50%;
+            border: none;
+            border-left: 1px dashed var(--grid);
+        }
+        
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+            background: var(--bg-secondary);
+            border: 1px solid rgba(232, 228, 220, 0.1);
+            border-radius: 4px;
+            cursor: crosshair;
+        }
+        
+        /* Footer controls */
+        footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+            border-top: 1px solid rgba(232, 228, 220, 0.08);
+        }
+        
+        .stats {
+            display: flex;
+            gap: 24px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--ink-dim);
+            letter-spacing: 0.02em;
+        }
+        
+        .stat-label {
+            opacity: 0.6;
+            margin-right: 6px;
+        }
+        
+        .stat-value {
+            color: var(--ink);
+        }
+        
+        button {
+            font-family: 'Noto Serif JP', serif;
+            font-size: 0.875rem;
+            font-weight: 500;
+            letter-spacing: 0.1em;
+            padding: 10px 24px;
+            background: transparent;
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            border-radius: 2px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        button:hover {
+            background: var(--accent);
+            color: var(--bg-primary);
+        }
+        
+        button:active {
+            transform: scale(0.98);
+        }
+        
+        /* Connection modal */
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .modal.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        .modal-content {
+            background: var(--bg-secondary);
+            border: 1px solid rgba(232, 228, 220, 0.1);
+            padding: 32px;
+            max-width: 400px;
+            width: 90%;
+            border-radius: 4px;
+        }
+        
+        .modal h2 {
+            font-size: 1.25rem;
+            font-weight: 300;
+            color: var(--ink);
+            margin-bottom: 16px;
+            letter-spacing: 0.1em;
+        }
+        
+        .modal input {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg-primary);
+            border: 1px solid rgba(232, 228, 220, 0.15);
+            border-radius: 2px;
+            color: var(--ink);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+            margin-bottom: 16px;
+        }
+        
+        .modal input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        
+        .modal p {
+            font-size: 0.8rem;
+            color: var(--ink-dim);
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+        
+        /* Pressure indicator */
+        .pressure-bar {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4px;
+            height: 120px;
+            background: rgba(232, 228, 220, 0.1);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        
+        .pressure-fill {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, var(--accent), var(--warning));
+            border-radius: 2px;
+            transition: height 0.05s ease-out;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            header, footer {
+                padding: 12px 16px;
+            }
+            
+            .logo {
+                font-size: 1.25rem;
+            }
+            
+            .stats {
+                gap: 12px;
+                font-size: 0.65rem;
+            }
+            
+            .canvas-container {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">SONIC <span>漢字</span></div>
+        <div class="status">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">DISCONNECTED</span>
+        </div>
+    </header>
+    
+    <div class="canvas-container">
+        <div class="canvas-wrapper">
+            <div class="grid-overlay"></div>
+            <div class="grid-diag"></div>
+            <canvas id="canvas"></canvas>
+        </div>
+        <div class="pressure-bar">
+            <div class="pressure-fill" id="pressureFill"></div>
+        </div>
+    </div>
+    
+    <footer>
+        <div class="stats">
+            <div>
+                <span class="stat-label">POINTS</span>
+                <span class="stat-value" id="pointCount">0</span>
+            </div>
+            <div>
+                <span class="stat-label">PRESSURE</span>
+                <span class="stat-value" id="pressureValue">0.00</span>
+            </div>
+            <div>
+                <span class="stat-label">LATENCY</span>
+                <span class="stat-value" id="latencyValue">--</span>
+            </div>
+        </div>
+        <button id="clearBtn">CLEAR</button>
+    </footer>
+    
+    <!-- Connection settings modal -->
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <h2>Connect to Server</h2>
+            <p>Enter the WebSocket server address (your Dell's IP):</p>
+            <input type="text" id="serverInput" placeholder="ws://192.168.1.50:8765" value="">
+            <button id="connectBtn" style="width: 100%;">CONNECT</button>
+        </div>
+    </div>
+
+<script>
+// ============================================================
+// SONIC KANJI - WebSocket Canvas for Apple Pencil
+// ============================================================
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+const pointCountEl = document.getElementById('pointCount');
+const pressureValueEl = document.getElementById('pressureValue');
+const latencyValueEl = document.getElementById('latencyValue');
+const pressureFill = document.getElementById('pressureFill');
+const clearBtn = document.getElementById('clearBtn');
+const modal = document.getElementById('modal');
+const serverInput = document.getElementById('serverInput');
+const connectBtn = document.getElementById('connectBtn');
+
+let ws = null;
+let pointCount = 0;
+let isDrawing = false;
+let lastSendTime = 0;
+
+// Track stroke paths for smooth rendering
+let currentPath = [];
+
+// ============================================================
+// CANVAS SETUP
+// ============================================================
+
+function resizeCanvas() {
+    const wrapper = canvas.parentElement;
+    const rect = wrapper.getBoundingClientRect();
+    
+    // Use device pixel ratio for sharp rendering on retina displays
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+    
+    // Store logical dimensions
+    canvas.logicalWidth = rect.width;
+    canvas.logicalHeight = rect.height;
+    
+    // Redraw existing strokes
+    redrawCanvas();
+}
+
+function redrawCanvas() {
+    ctx.clearRect(0, 0, canvas.logicalWidth, canvas.logicalHeight);
+    
+    // Redraw current path
+    if (currentPath.length > 1) {
+        ctx.strokeStyle = '#e8e4dc';
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        
+        ctx.beginPath();
+        ctx.moveTo(currentPath[0].x, currentPath[0].y);
+        
+        for (let i = 1; i < currentPath.length; i++) {
+            const p = currentPath[i];
+            ctx.lineWidth = p.pressure * 8 + 1;
+            ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke();
+    }
+}
+
+function clearCanvas() {
+    currentPath = [];
+    pointCount = 0;
+    pointCountEl.textContent = '0';
+    ctx.clearRect(0, 0, canvas.logicalWidth, canvas.logicalHeight);
+}
+
+// ============================================================
+// WEBSOCKET CONNECTION
+// ============================================================
+
+function connect(serverUrl) {
+    if (ws) {
+        ws.close();
+    }
+    
+    statusDot.className = 'status-dot';
+    statusText.textContent = 'CONNECTING...';
+    
+    try {
+        ws = new WebSocket(serverUrl);
+        
+        ws.onopen = () => {
+            console.log('Connected to Render Engine');
+            statusDot.classList.add('connected');
+            statusText.textContent = 'CONNECTED';
+            modal.classList.remove('visible');
+            
+            // Save successful connection
+            localStorage.setItem('sonicKanjiServer', serverUrl);
+        };
+        
+        ws.onclose = () => {
+            console.log('Disconnected from Render Engine');
+            statusDot.className = 'status-dot';
+            statusText.textContent = 'DISCONNECTED';
+            
+            // Attempt reconnection after 2 seconds
+            setTimeout(() => {
+                if (ws && ws.readyState === WebSocket.CLOSED) {
+                    connect(serverUrl);
+                }
+            }, 2000);
+        };
+        
+        ws.onerror = (err) => {
+            console.error('WebSocket error:', err);
+            statusText.textContent = 'ERROR';
+        };
+        
+    } catch (err) {
+        console.error('Connection failed:', err);
+        statusText.textContent = 'FAILED';
+    }
+}
+
+function sendPoint(data) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        const sendStart = performance.now();
+        ws.send(JSON.stringify(data));
+        
+        // Update latency display (rough estimate)
+        const latency = performance.now() - lastSendTime;
+        if (lastSendTime > 0 && latency < 100) {
+            latencyValueEl.textContent = latency.toFixed(0) + 'ms';
+        }
+        lastSendTime = performance.now();
+    }
+}
+
+// ============================================================
+// POINTER EVENTS (Apple Pencil + Touch + Mouse)
+// ============================================================
+
+function handlePointerDown(e) {
+    if (e.pointerType === 'touch' && e.pressure === 0) {
+        // Ignore palm/finger touch if using pencil
+        return;
+    }
+    
+    isDrawing = true;
+    statusDot.classList.add('active');
+    currentPath = [];
+    
+    handlePointerMove(e);
+}
+
+function handlePointerMove(e) {
+    if (!isDrawing) return;
+    if (e.pressure === 0) return;
+    
+    // Get coalesced events for high-frequency sampling (240Hz on Apple Pencil)
+    const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    
+    events.forEach(p => {
+        // Get canvas-relative coordinates
+        const rect = canvas.getBoundingClientRect();
+        const x = p.clientX - rect.left;
+        const y = p.clientY - rect.top;
+        
+        // Normalize to 0-1 range for the server
+        const nX = x / canvas.logicalWidth;
+        const nY = y / canvas.logicalHeight;
+        
+        // Get pen angles (in radians)
+        // Note: Not all browsers/hardware support these
+        const azimuth = p.azimuthAngle || 0;
+        const altitude = p.altitudeAngle || (Math.PI / 2); // Default to perpendicular
+        
+        // Create data packet
+        const data = {
+            x: nX,
+            y: nY,
+            force: p.pressure,
+            azimuth: azimuth,
+            altitude: altitude,
+            t: Date.now() / 1000  // Unix timestamp in seconds
+        };
+        
+        // Send to server
+        sendPoint(data);
+        
+        // Update local display
+        pointCount++;
+        pointCountEl.textContent = pointCount;
+        pressureValueEl.textContent = p.pressure.toFixed(2);
+        pressureFill.style.height = (p.pressure * 100) + '%';
+        
+        // Store for drawing
+        currentPath.push({ x, y, pressure: p.pressure });
+        
+        // Draw point with pressure-based thickness
+        drawPoint(x, y, p.pressure);
+    });
+}
+
+function handlePointerUp(e) {
+    isDrawing = false;
+    statusDot.classList.remove('active');
+    pressureFill.style.height = '0%';
+}
+
+function drawPoint(x, y, pressure) {
+    // Draw with variable opacity and size based on pressure
+    const radius = pressure * 4 + 0.5;
+    const alpha = 0.3 + pressure * 0.7;
+    
+    ctx.fillStyle = `rgba(232, 228, 220, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Connect to previous point for smooth lines
+    if (currentPath.length > 1) {
+        const prev = currentPath[currentPath.length - 2];
+        ctx.strokeStyle = `rgba(232, 228, 220, ${alpha * 0.8})`;
+        ctx.lineWidth = pressure * 6 + 0.5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(prev.x, prev.y);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+    }
+}
+
+// ============================================================
+// EVENT LISTENERS
+// ============================================================
+
+canvas.addEventListener('pointerdown', handlePointerDown);
+canvas.addEventListener('pointermove', handlePointerMove);
+canvas.addEventListener('pointerup', handlePointerUp);
+canvas.addEventListener('pointerleave', handlePointerUp);
+canvas.addEventListener('pointercancel', handlePointerUp);
+
+// Prevent default touch behaviors
+canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+// Clear button
+clearBtn.addEventListener('click', clearCanvas);
+
+// Connection modal
+connectBtn.addEventListener('click', () => {
+    const url = serverInput.value.trim();
+    if (url) {
+        connect(url);
+    }
+});
+
+serverInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        connectBtn.click();
+    }
+});
+
+// Window resize
+window.addEventListener('resize', resizeCanvas);
+
+// ============================================================
+// INITIALIZATION
+// ============================================================
+
+function init() {
+    resizeCanvas();
+    
+    // Auto-detect server address from the page's host
+    // (WebSocket server runs on same machine, port 8765)
+    const host = window.location.hostname || 'localhost';
+    const autoServerUrl = `ws://${host}:8765`;
+    
+    serverInput.value = autoServerUrl;
+    connect(autoServerUrl);
+}
+
+init();
+</script>
+</body>
+</html>
+
