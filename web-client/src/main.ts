@@ -64,13 +64,18 @@ function initializeUI(): void {
 
   // Play template button
   playBtn.addEventListener('click', async () => {
+    const character = kanjiSelect.value;
+    if (!character) {
+      console.warn('No kanji selected for template playback.');
+      return;
+    }
+
     if (templatePlayer.playing) {
       templatePlayer.stop();
       playBtn.textContent = '▶ PLAY';
       playBtn.classList.remove('playing');
       statusDot.classList.remove('active');
     } else {
-      const character = kanjiSelect.value;
       playBtn.textContent = '■ STOP';
       playBtn.classList.add('playing');
       
