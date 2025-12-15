@@ -22,6 +22,10 @@ let canvasInput: CanvasInput;
 let templatePlayer: TemplatePlayer;
 let pointCount = 0;
 let strokeSoundStarted = false; // Track if we've started sound for current stroke
+let recordedStrokes: StrokePoint[][] = [];
+let currentRecordedStroke: StrokePoint[] | null = null;
+let isRecordingPlayback = false;
+let recordingAbortController: AbortController | null = null;
 
 // DOM Elements
 let statusDot: HTMLElement;
@@ -32,6 +36,7 @@ let pressureFill: HTMLElement;
 let frequencyValueEl: HTMLElement;
 let kanjiSelect: HTMLSelectElement;
 let playBtn: HTMLButtonElement;
+  let replayBtn: HTMLButtonElement;
 
 // ============================================================
 // INITIALIZATION
@@ -47,18 +52,31 @@ function initializeUI(): void {
   frequencyValueEl = document.getElementById('frequencyValue')!;
   kanjiSelect = document.getElementById('kanjiSelect') as HTMLSelectElement;
   playBtn = document.getElementById('playBtn') as HTMLButtonElement;
+  replayBtn = document.getElementById('replayBtn') as HTMLButtonElement;
+
+  // Force blank (no-template) mode on initial load
+  kanjiSelect.value = '';
 
   // Clear button
   const clearBtn = document.getElementById('clearBtn')!;
   clearBtn.addEventListener('click', () => {
     pointCount = 0;
     pointCountEl.textContent = '0';
+    recordedStrokes = [];
+    currentRecordedStroke = null;
     // Clear and redraw the guide for currently selected kanji
     updateKanjiGuide();
   });
 
   // Update guide when kanji selection changes
   kanjiSelect.addEventListener('change', () => {
+    // Switching kanji modes should discard previously recorded strokes
+    recordedStrokes = [];
+    currentRecordedStroke = null;
+    if (isRecordingPlayback) {
+      stopRecordingPlayback();
+    }
+
     updateKanjiGuide();
   });
 
@@ -104,6 +122,21 @@ function initializeUI(): void {
     }
   });
 
+  // Replay recorded strokes button
+  replayBtn.addEventListener('click', async () => {
+    if (isRecordingPlayback) {
+      stopRecordingPlayback();
+      return;
+    }
+
+    if (!recordedStrokes.length) {
+      console.warn('No recorded strokes to replay.');
+      return;
+    }
+
+    await playRecordedStrokes();
+  });
+
   // Initialize synth on first interaction (required by browser autoplay policy)
   const initAudioBtn = document.getElementById('initAudioBtn')!;
   const initModal = document.getElementById('initModal')!;
@@ -142,6 +175,7 @@ function handleStrokeStart(): void {
   featureExtractor.reset();
   strokeSoundStarted = false; // Will start sound on first point with correct position
   statusDot.classList.add('active');
+  currentRecordedStroke = [];
 }
 
 function handleStrokeEnd(): void {
@@ -149,6 +183,11 @@ function handleStrokeEnd(): void {
   strokeSoundStarted = false;
   statusDot.classList.remove('active');
   pressureFill.style.height = '0%';
+
+  if (currentRecordedStroke && currentRecordedStroke.length > 0) {
+    recordedStrokes.push(currentRecordedStroke);
+  }
+  currentRecordedStroke = null;
 }
 
 function handlePoint(point: StrokePoint): void {
@@ -162,6 +201,11 @@ function handlePoint(point: StrokePoint): void {
 
   // Extract features
   const features = featureExtractor.update(point);
+
+  // Record point for potential playback
+  if (currentRecordedStroke) {
+    currentRecordedStroke.push(point);
+  }
   
   // For the first point of a stroke, snap to its position (no slide from previous stroke)
   if (!strokeSoundStarted) {
@@ -185,6 +229,90 @@ function handlePoint(point: StrokePoint): void {
     synth.update(synthParams);
     frequencyValueEl.textContent = `${synthParams.frequency.toFixed(0)}Hz`;
   }
+}
+
+/**
+ * Replay the recorded strokes using the same DSP pipeline.
+ */
+async function playRecordedStrokes(): Promise<void> {
+  if (!recordedStrokes.length || isRecordingPlayback) return;
+
+  isRecordingPlayback = true;
+  recordingAbortController = new AbortController();
+
+  const playbackExtractor = new StreamingFeatureExtractor(0.3);
+
+  statusDot.classList.add('active');
+
+  try {
+    for (let strokeIndex = 0; strokeIndex < recordedStrokes.length; strokeIndex++) {
+      const stroke = recordedStrokes[strokeIndex];
+      if (!stroke.length) continue;
+
+      playbackExtractor.reset();
+
+      // Start sound from first point of this stroke
+      const firstPoint = stroke[0];
+      const initialParams = {
+        frequency: mapYToFreq(firstPoint.y),
+        amplitude: mapForceToAmplitude(firstPoint.force),
+        pan: (firstPoint.x * 2) - 1,
+        vibratoDepth: 0,
+        vibratoRate: 5,
+      };
+      synth.startSound(initialParams);
+      frequencyValueEl.textContent = `${initialParams.frequency.toFixed(0)}Hz`;
+
+      for (let i = 0; i < stroke.length; i++) {
+        if (recordingAbortController?.signal.aborted) {
+          throw new DOMException('Aborted', 'AbortError');
+        }
+
+        const point = stroke[i];
+
+        // Update UI to reflect playback state
+        pressureValueEl.textContent = point.force.toFixed(2);
+        pressureFill.style.height = `${point.force * 100}%`;
+
+        const features = playbackExtractor.update(point);
+        if (features) {
+          const synthParams = mapFeaturesToSynthParams(features);
+          synth.update(synthParams);
+          frequencyValueEl.textContent = `${synthParams.frequency.toFixed(0)}Hz`;
+        }
+
+        // Wait based on recorded timing between points
+        if (i < stroke.length - 1) {
+          const currentT = point.t;
+          const nextT = stroke[i + 1].t;
+          const dtMs = Math.max(0, (nextT - currentT) * 1000);
+          await sleepWithAbort(dtMs, recordingAbortController.signal);
+        }
+      }
+
+      synth.stopSound();
+
+      // Short pause between strokes
+      if (strokeIndex < recordedStrokes.length - 1) {
+        await sleepWithAbort(200, recordingAbortController.signal);
+      }
+    }
+  } catch (e) {
+    if ((e as DOMException).name !== 'AbortError') {
+      console.error('Recording playback error:', e);
+    }
+  } finally {
+    synth.stopSound();
+    statusDot.classList.remove('active');
+    pressureFill.style.height = '0%';
+    isRecordingPlayback = false;
+    recordingAbortController = null;
+  }
+}
+
+function stopRecordingPlayback(): void {
+  if (!isRecordingPlayback) return;
+  recordingAbortController?.abort();
 }
 
 /**
@@ -215,6 +343,16 @@ function mapForceToAmplitude(force: number): number {
   const maxAmp = DEFAULT_SYNTH_CONFIG.maxAmp;
   const clamped = Math.max(0, Math.min(1, force));
   return minAmp + Math.pow(clamped, 1.5) * (maxAmp - minAmp);
+}
+
+function sleepWithAbort(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(resolve, ms);
+    signal.addEventListener('abort', () => {
+      clearTimeout(timeout);
+      reject(new DOMException('Aborted', 'AbortError'));
+    });
+  });
 }
 
 // ============================================================
