@@ -90,7 +90,12 @@ export class CanvasInput {
     this.currentPath = [];
 
     this.options.onStrokeStart?.();
-    this.handlePointerMove(e);
+
+    // Some platforms (e.g. mouse in Chrome) report pressure=0 on the pointerdown
+    // event itself, even with a button held. Fall back to 0.5 so sound always
+    // starts immediately on press, not only once the pointer starts moving.
+    const rect = this.canvas.getBoundingClientRect();
+    this.emitPoint(e, e.pressure > 0 ? e.pressure : 0.5, rect);
   }
 
   private handlePointerMove(e: PointerEvent): void {
@@ -102,31 +107,34 @@ export class CanvasInput {
     const rect = this.canvas.getBoundingClientRect();
 
     for (const p of events) {
-      const x = p.clientX - rect.left;
-      const y = p.clientY - rect.top;
+      this.emitPoint(p, p.pressure, rect);
+    }
+  }
 
-      const nX = x / this.logicalWidth;
-      const nY = y / this.logicalHeight;
+  private emitPoint(e: PointerEvent, pressure: number, rect: DOMRect): void {
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
-      const azimuth = (p as PointerEvent & { azimuthAngle?: number }).azimuthAngle ?? 0;
-      const altitude = (p as PointerEvent & { altitudeAngle?: number }).altitudeAngle ?? Math.PI / 2;
+    const nX = x / this.logicalWidth;
+    const nY = y / this.logicalHeight;
 
-      const point: StrokePoint = {
-        x: nX,
-        y: nY,
-        force: p.pressure,
-        azimuth,
-        altitude,
-        t: performance.now() / 1000 - this.strokeStartTime,
-      };
+    const azimuth = (e as PointerEvent & { azimuthAngle?: number }).azimuthAngle ?? 0;
+    const altitude = (e as PointerEvent & { altitudeAngle?: number }).altitudeAngle ?? Math.PI / 2;
 
-      this.options.onPoint(point);
+    const point: StrokePoint = {
+      x: nX,
+      y: nY,
+      force: pressure,
+      azimuth,
+      altitude,
+      t: performance.now() / 1000 - this.strokeStartTime,
+    };
 
-      this.currentPath.push({ x, y, pressure: p.pressure });
+    this.options.onPoint(point);
+    this.currentPath.push({ x, y, pressure });
 
-      if (this.options.drawOnCanvas) {
-        this.drawPoint(x, y, p.pressure);
-      }
+    if (this.options.drawOnCanvas) {
+      this.drawPoint(x, y, pressure);
     }
   }
 
@@ -162,29 +170,31 @@ export class CanvasInput {
     this.currentPath = [];
   }
 
-  drawGuide(strokes: number[][][], color = 'rgba(201, 70, 61, 0.25)'): void {
+  drawGuide(strokes: number[][][], strokeColors?: string[]): void {
+    const defaultColor = 'rgba(201, 70, 61, 0.25)';
     const padding = 0.1;
     const scale = 1 - padding * 2;
     const offsetX = padding * this.logicalWidth;
     const offsetY = padding * this.logicalHeight;
 
-    this.ctx.strokeStyle = color;
     this.ctx.lineWidth = 3;
     this.ctx.lineCap = 'round';
     this.ctx.lineJoin = 'round';
 
-    for (const stroke of strokes) {
+    for (let i = 0; i < strokes.length; i++) {
+      const stroke = strokes[i];
       if (stroke.length < 2) continue;
 
+      this.ctx.strokeStyle = strokeColors?.[i] ?? defaultColor;
       this.ctx.beginPath();
 
       const startX = stroke[0][0] * this.logicalWidth * scale + offsetX;
       const startY = stroke[0][1] * this.logicalHeight * scale + offsetY;
       this.ctx.moveTo(startX, startY);
 
-      for (let i = 1; i < stroke.length; i++) {
-        const x = stroke[i][0] * this.logicalWidth * scale + offsetX;
-        const y = stroke[i][1] * this.logicalHeight * scale + offsetY;
+      for (let j = 1; j < stroke.length; j++) {
+        const x = stroke[j][0] * this.logicalWidth * scale + offsetX;
+        const y = stroke[j][1] * this.logicalHeight * scale + offsetY;
         this.ctx.lineTo(x, y);
       }
 
@@ -192,9 +202,9 @@ export class CanvasInput {
     }
   }
 
-  clearAndDrawGuide(strokes: number[][][]): void {
+  clearAndDrawGuide(strokes: number[][][], strokeColors?: string[]): void {
     this.clear();
-    this.drawGuide(strokes);
+    this.drawGuide(strokes, strokeColors);
   }
 
   /** Reset the tracked position between playback strokes. */

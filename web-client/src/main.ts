@@ -10,7 +10,28 @@ import { mapFeaturesToSynthParams, yToPitch, forceToAmplitude } from './audio/ma
 import { KanjiSynth } from './audio/synth';
 import { CanvasInput } from './canvas/input';
 import { TemplatePlayer } from './templates/playback';
-import { getTemplate, getAvailableCharacters } from './templates/kanji-data';
+import { KanjiTemplate, getTemplate, getAvailableCharacters } from './templates/kanji-data';
+
+// Palette for radical coloring — cycles if a kanji has more radicals than entries.
+const RADICAL_PALETTE = [
+  'rgba(201, 70, 61, 0.55)',   // red
+  'rgba(74, 156, 109, 0.55)',  // green
+  'rgba(212, 168, 75, 0.55)',  // gold
+  'rgba(80, 150, 210, 0.55)',  // blue
+  'rgba(170, 100, 200, 0.55)', // purple
+  'rgba(200, 130, 70, 0.55)',  // orange
+];
+
+function buildStrokeColors(template: KanjiTemplate): string[] {
+  const colors = new Array<string>(template.strokeCount).fill('rgba(201, 70, 61, 0.25)');
+  template.radicals.forEach((group, i) => {
+    const color = RADICAL_PALETTE[i % RADICAL_PALETTE.length];
+    for (const idx of group.strokeIndices) {
+      if (idx < colors.length) colors[idx] = color;
+    }
+  });
+  return colors;
+}
 
 // ============================================================
 // APP
@@ -28,6 +49,8 @@ class App {
   private currentRecordedStroke: StrokePoint[] | null = null;
   private isRecordingPlayback = false;
   private recordingAbortController: AbortController | null = null;
+  private radicalsEnabled = false;
+  private playbackSpeed = 2; // multiplier; 1 = 500ms/stroke, 2 = 250ms/stroke (default snappy)
 
   // DOM elements
   private statusDot: HTMLElement;
@@ -39,6 +62,9 @@ class App {
   private kanjiSelect: HTMLSelectElement;
   private playBtn: HTMLButtonElement;
   private replayBtn: HTMLButtonElement;
+  private radicalsBtn: HTMLButtonElement;
+  private speedSlider: HTMLInputElement;
+  private speedValueEl: HTMLElement;
 
   constructor() {
     this.synth = new KanjiSynth(DEFAULT_SYNTH_CONFIG);
@@ -55,6 +81,9 @@ class App {
     this.kanjiSelect = document.getElementById('kanjiSelect') as HTMLSelectElement;
     this.playBtn = document.getElementById('playBtn') as HTMLButtonElement;
     this.replayBtn = document.getElementById('replayBtn') as HTMLButtonElement;
+    this.radicalsBtn = document.getElementById('radicalsBtn') as HTMLButtonElement;
+    this.speedSlider = document.getElementById('speedSlider') as HTMLInputElement;
+    this.speedValueEl = document.getElementById('speedValue')!;
 
     const canvas = document.getElementById('canvas') as HTMLCanvasElement;
     this.canvasInput = new CanvasInput(canvas, {
@@ -96,6 +125,17 @@ class App {
 
   private bindUI(): void {
     document.getElementById('clearBtn')!.addEventListener('click', () => this.handleClear());
+
+    this.radicalsBtn.addEventListener('click', () => {
+      this.radicalsEnabled = !this.radicalsEnabled;
+      this.radicalsBtn.classList.toggle('toggled', this.radicalsEnabled);
+      this.updateKanjiGuide();
+    });
+
+    this.speedSlider.addEventListener('input', () => {
+      this.playbackSpeed = parseFloat(this.speedSlider.value);
+      this.speedValueEl.textContent = `${this.playbackSpeed.toFixed(1)}x`;
+    });
 
     this.kanjiSelect.addEventListener('change', () => {
       this.recordedStrokes = [];
@@ -156,8 +196,8 @@ class App {
       this.updateKanjiGuide();
 
       await this.templatePlayer.play(character, {
-        strokeDuration: 600,
-        strokePause: 300,
+        strokeDuration: 500 / this.playbackSpeed,
+        strokePause: 150 / this.playbackSpeed,
         pressure: 0.6,
         onStrokeStart: i => {
           this.statusDot.classList.add('active');
@@ -295,7 +335,7 @@ class App {
           }
 
           if (i < stroke.length - 1) {
-            const dtMs = Math.max(0, (stroke[i + 1].t - point.t) * 1000);
+            const dtMs = Math.max(0, (stroke[i + 1].t - point.t) * 1000) / this.playbackSpeed;
             await this.sleepWithAbort(dtMs, this.recordingAbortController.signal);
           }
         }
@@ -333,7 +373,8 @@ class App {
     const template = getTemplate(character);
 
     if (template) {
-      this.canvasInput.clearAndDrawGuide(template.strokes);
+      const colors = this.radicalsEnabled ? buildStrokeColors(template) : undefined;
+      this.canvasInput.clearAndDrawGuide(template.strokes, colors);
     } else {
       this.canvasInput.clear();
     }

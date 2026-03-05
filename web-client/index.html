@@ -170,11 +170,38 @@
 
     .stats {
       display: flex;
+      align-items: center;
       gap: 24px;
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.7rem;
       color: var(--ink-dim);
       letter-spacing: 0.02em;
+    }
+
+    .speed-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 80px;
+      height: 3px;
+      background: rgba(232, 228, 220, 0.15);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
     }
 
     .stat-label {
@@ -253,6 +280,12 @@
     .play-btn.playing {
       background: var(--accent);
       color: var(--bg-primary);
+    }
+
+    button.toggled {
+      background: rgba(232, 228, 220, 0.12);
+      border-color: var(--ink-dim);
+      color: var(--ink);
     }
 
     /* Pressure indicator */
@@ -382,11 +415,17 @@
         <span class="stat-label">FREQ</span>
         <span class="stat-value" id="frequencyValue">--</span>
       </div>
+      <div class="speed-control">
+        <span class="stat-label">SPEED</span>
+        <input type="range" id="speedSlider" min="0.25" max="4" step="0.25" value="2">
+        <span class="stat-value" id="speedValue">2.0x</span>
+      </div>
     </div>
     <div class="template-controls">
       <select id="kanjiSelect" class="kanji-select"></select>
       <button id="playBtn" class="play-btn">▶ PLAY</button>
       <button id="replayBtn" class="play-btn">↺ REPLAY</button>
+      <button id="radicalsBtn">RADICALS</button>
       <button id="clearBtn">CLEAR</button>
     </div>
   </footer>
