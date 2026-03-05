@@ -22,7 +22,7 @@ from typing import List, Tuple
 KANJIVG_BASE = "https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/{}.svg"
 VIEWBOX_SIZE = 109.0
 POINTS_PER_UNIT = 40  # points per unit of normalized arc length (coords in [0,1])
-MIN_POINTS = 8        # floor so very short strokes still animate smoothly
+MIN_POINTS = 20       # floor ensures short strokes still render smoothly as guide overlays
 SVG_NS = "http://www.w3.org/2000/svg"
 KVG_NS = "http://kanjivg.tagaini.net"
 
