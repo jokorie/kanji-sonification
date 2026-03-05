@@ -326,12 +326,16 @@ class App {
     const playbackExtractor = new StreamingFeatureExtractor(0.3);
     this.statusDot.classList.add('active');
 
+    // Start with a clean slate showing just the guide.
+    this.updateKanjiGuide();
+
     try {
       for (let strokeIndex = 0; strokeIndex < this.recordedStrokes.length; strokeIndex++) {
         const stroke = this.recordedStrokes[strokeIndex];
         if (!stroke.length) continue;
 
         playbackExtractor.reset();
+        this.canvasInput.startPlaybackStroke();
 
         const firstPoint = stroke[0];
         const initialParams = {
@@ -351,6 +355,7 @@ class App {
 
           const point = stroke[i];
           this.pressureFill.style.height = `${point.force * 100}%`;
+          this.canvasInput.drawPlaybackPoint(point.x, point.y, point.force);
 
           const features = playbackExtractor.update(point);
           if (features) {
