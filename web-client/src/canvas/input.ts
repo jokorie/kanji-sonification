@@ -226,14 +226,14 @@ export class CanvasInput {
     const scale = 1 - padding * 2;
     const x = normX * this.logicalWidth * scale + padding * this.logicalWidth;
     const y = normY * this.logicalHeight * scale + padding * this.logicalHeight;
-    const lineWidth = pressure * 6 + 2;
+    const lineWidth = pressure * 3 + 1;
 
     this.ctx.save();
 
     if (this.lastPlaybackPoint) {
-      this.ctx.shadowColor = 'rgba(201, 70, 61, 0.7)';
-      this.ctx.shadowBlur = 14;
-      this.ctx.strokeStyle = 'rgba(232, 228, 220, 0.95)';
+      this.ctx.shadowColor = 'rgba(201, 70, 61, 0.4)';
+      this.ctx.shadowBlur = 6;
+      this.ctx.strokeStyle = 'rgba(232, 228, 220, 0.9)';
       this.ctx.lineWidth = lineWidth;
       this.ctx.lineCap = 'round';
       this.ctx.lineJoin = 'round';
@@ -245,10 +245,10 @@ export class CanvasInput {
 
     // Glowing tip dot
     this.ctx.shadowColor = '#c9463d';
-    this.ctx.shadowBlur = 28;
+    this.ctx.shadowBlur = 10;
     this.ctx.fillStyle = '#ffffff';
     this.ctx.beginPath();
-    this.ctx.arc(x, y, lineWidth / 2 + 1, 0, Math.PI * 2);
+    this.ctx.arc(x, y, lineWidth / 2 + 0.5, 0, Math.PI * 2);
     this.ctx.fill();
 
     this.ctx.restore();
@@ -264,14 +264,14 @@ export class CanvasInput {
   drawUserReplayPoint(normX: number, normY: number, pressure = 0.6): void {
     const x = normX * this.logicalWidth;
     const y = normY * this.logicalHeight;
-    const lineWidth = pressure * 6 + 2;
+    const lineWidth = pressure * 3 + 1;
 
     this.ctx.save();
 
     if (this.lastPlaybackPoint) {
-      this.ctx.shadowColor = 'rgba(201, 70, 61, 0.7)';
-      this.ctx.shadowBlur = 14;
-      this.ctx.strokeStyle = 'rgba(232, 228, 220, 0.95)';
+      this.ctx.shadowColor = 'rgba(201, 70, 61, 0.4)';
+      this.ctx.shadowBlur = 6;
+      this.ctx.strokeStyle = 'rgba(232, 228, 220, 0.9)';
       this.ctx.lineWidth = lineWidth;
       this.ctx.lineCap = 'round';
       this.ctx.lineJoin = 'round';
@@ -282,10 +282,10 @@ export class CanvasInput {
     }
 
     this.ctx.shadowColor = '#c9463d';
-    this.ctx.shadowBlur = 28;
+    this.ctx.shadowBlur = 10;
     this.ctx.fillStyle = '#ffffff';
     this.ctx.beginPath();
-    this.ctx.arc(x, y, lineWidth / 2 + 1, 0, Math.PI * 2);
+    this.ctx.arc(x, y, lineWidth / 2 + 0.5, 0, Math.PI * 2);
     this.ctx.fill();
 
     this.ctx.restore();
