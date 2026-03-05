@@ -1,6 +1,6 @@
 /**
  * Canvas input handling for Apple Pencil / pointer events.
- * 
+ *
  * Captures high-frequency pen data using coalesced events.
  */
 
@@ -14,6 +14,8 @@ export interface CanvasInputOptions {
   onPoint: PointCallback;
   onStrokeStart?: StrokeStartCallback;
   onStrokeEnd?: StrokeEndCallback;
+  /** Called after each resize so callers can redraw overlays (e.g. kanji guide). */
+  onResize?: () => void;
   drawOnCanvas?: boolean;
 }
 
@@ -21,17 +23,31 @@ export class CanvasInput {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private options: CanvasInputOptions;
-  
-  private isDrawing: boolean = false;
-  private strokeStartTime: number = 0;
+
+  private isDrawing = false;
+  private strokeStartTime = 0;
   private currentPath: Array<{ x: number; y: number; pressure: number }> = [];
+
+  // Logical (CSS) pixel dimensions — kept as class state instead of stapled onto the DOM element.
+  private logicalWidth = 0;
+  private logicalHeight = 0;
+
+  // Tracks the previous point during template playback drawing.
+  private lastPlaybackPoint: { x: number; y: number } | null = null;
+
+  // Stored so it can be removed in destroy().
+  private readonly resizeHandler: () => void;
 
   constructor(canvas: HTMLCanvasElement, options: CanvasInputOptions) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
-    this.options = {
-      drawOnCanvas: true,
-      ...options,
+    this.options = { drawOnCanvas: true, ...options };
+
+    // Fire onResize only on subsequent resizes, not during initial construction.
+    // The caller is responsible for any initial guide/overlay drawing after construction.
+    this.resizeHandler = () => {
+      this.setupCanvas();
+      this.options.onResize?.();
     };
 
     this.setupCanvas();
@@ -39,19 +55,16 @@ export class CanvasInput {
   }
 
   private setupCanvas(): void {
-    // Handle high-DPI displays
     const rect = this.canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    
+
     this.canvas.width = rect.width * dpr;
     this.canvas.height = rect.height * dpr;
     this.ctx.scale(dpr, dpr);
-    
-    // Store logical dimensions
-    (this.canvas as any).logicalWidth = rect.width;
-    (this.canvas as any).logicalHeight = rect.height;
-    
-    // Canvas styling
+
+    this.logicalWidth = rect.width;
+    this.logicalHeight = rect.height;
+
     this.ctx.lineCap = 'round';
     this.ctx.lineJoin = 'round';
   }
@@ -62,23 +75,20 @@ export class CanvasInput {
     this.canvas.addEventListener('pointerup', this.handlePointerUp.bind(this));
     this.canvas.addEventListener('pointerleave', this.handlePointerUp.bind(this));
     this.canvas.addEventListener('pointercancel', this.handlePointerUp.bind(this));
-    
-    // Prevent default touch behaviors
+
     this.canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
     this.canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 
-    // Handle resize
-    window.addEventListener('resize', () => this.setupCanvas());
+    window.addEventListener('resize', this.resizeHandler);
   }
 
   private handlePointerDown(e: PointerEvent): void {
-    // Ignore palm/finger touch if pressure is 0
     if (e.pointerType === 'touch' && e.pressure === 0) return;
 
     this.isDrawing = true;
     this.strokeStartTime = performance.now() / 1000;
     this.currentPath = [];
-    
+
     this.options.onStrokeStart?.();
     this.handlePointerMove(e);
   }
@@ -87,43 +97,33 @@ export class CanvasInput {
     if (!this.isDrawing) return;
     if (e.pressure === 0) return;
 
-    // Get coalesced events for high-frequency sampling (240Hz on Apple Pencil)
     const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
-    
-    const logicalWidth = (this.canvas as any).logicalWidth || this.canvas.clientWidth;
-    const logicalHeight = (this.canvas as any).logicalHeight || this.canvas.clientHeight;
+    // Hoist out of the loop — getBoundingClientRect() forces a layout reflow.
+    const rect = this.canvas.getBoundingClientRect();
 
     for (const p of events) {
-      // Get canvas-relative coordinates
-      const rect = this.canvas.getBoundingClientRect();
       const x = p.clientX - rect.left;
       const y = p.clientY - rect.top;
 
-      // Normalize to 0-1 range
-      const nX = x / logicalWidth;
-      const nY = y / logicalHeight;
+      const nX = x / this.logicalWidth;
+      const nY = y / this.logicalHeight;
 
-      // Get pen angles (in radians)
-      const azimuth = (p as any).azimuthAngle || 0;
-      const altitude = (p as any).altitudeAngle || Math.PI / 2; // Default to perpendicular
+      const azimuth = (p as PointerEvent & { azimuthAngle?: number }).azimuthAngle ?? 0;
+      const altitude = (p as PointerEvent & { altitudeAngle?: number }).altitudeAngle ?? Math.PI / 2;
 
-      // Create stroke point
       const point: StrokePoint = {
         x: nX,
         y: nY,
         force: p.pressure,
         azimuth,
         altitude,
-        t: (performance.now() / 1000) - this.strokeStartTime,
+        t: performance.now() / 1000 - this.strokeStartTime,
       };
 
-      // Call the point callback
       this.options.onPoint(point);
 
-      // Store for drawing
       this.currentPath.push({ x, y, pressure: p.pressure });
 
-      // Draw on canvas if enabled
       if (this.options.drawOnCanvas) {
         this.drawPoint(x, y, p.pressure);
       }
@@ -132,7 +132,7 @@ export class CanvasInput {
 
   private handlePointerUp(_e: PointerEvent): void {
     if (!this.isDrawing) return;
-    
+
     this.isDrawing = false;
     this.options.onStrokeEnd?.();
   }
@@ -141,13 +141,11 @@ export class CanvasInput {
     const radius = pressure * 4 + 0.5;
     const alpha = 0.3 + pressure * 0.7;
 
-    // Draw point
     this.ctx.fillStyle = `rgba(232, 228, 220, ${alpha})`;
     this.ctx.beginPath();
     this.ctx.arc(x, y, radius, 0, Math.PI * 2);
     this.ctx.fill();
 
-    // Connect to previous point for smooth lines
     if (this.currentPath.length > 1) {
       const prev = this.currentPath[this.currentPath.length - 2];
       this.ctx.strokeStyle = `rgba(232, 228, 220, ${alpha * 0.8})`;
@@ -159,31 +157,16 @@ export class CanvasInput {
     }
   }
 
-  /**
-   * Clear the canvas.
-   */
   clear(): void {
-    const logicalWidth = (this.canvas as any).logicalWidth || this.canvas.clientWidth;
-    const logicalHeight = (this.canvas as any).logicalHeight || this.canvas.clientHeight;
-    this.ctx.clearRect(0, 0, logicalWidth, logicalHeight);
+    this.ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
     this.currentPath = [];
   }
 
-  /**
-   * Draw a template guide (faint stroke outline).
-   * 
-   * @param strokes - Array of strokes, each stroke is array of [x, y] points (0-1 normalized)
-   * @param color - CSS color for the guide (default: semi-transparent)
-   */
-  drawGuide(strokes: number[][][], color: string = 'rgba(201, 70, 61, 0.25)'): void {
-    const logicalWidth = (this.canvas as any).logicalWidth || this.canvas.clientWidth;
-    const logicalHeight = (this.canvas as any).logicalHeight || this.canvas.clientHeight;
-    
-    // Add padding so strokes don't touch edges
-    const padding = 0.1; // 10% padding on each side
-    const scale = 1 - (padding * 2);
-    const offsetX = padding * logicalWidth;
-    const offsetY = padding * logicalHeight;
+  drawGuide(strokes: number[][][], color = 'rgba(201, 70, 61, 0.25)'): void {
+    const padding = 0.1;
+    const scale = 1 - padding * 2;
+    const offsetX = padding * this.logicalWidth;
+    const offsetY = padding * this.logicalHeight;
 
     this.ctx.strokeStyle = color;
     this.ctx.lineWidth = 3;
@@ -194,16 +177,14 @@ export class CanvasInput {
       if (stroke.length < 2) continue;
 
       this.ctx.beginPath();
-      
-      // Move to first point
-      const startX = stroke[0][0] * logicalWidth * scale + offsetX;
-      const startY = stroke[0][1] * logicalHeight * scale + offsetY;
+
+      const startX = stroke[0][0] * this.logicalWidth * scale + offsetX;
+      const startY = stroke[0][1] * this.logicalHeight * scale + offsetY;
       this.ctx.moveTo(startX, startY);
 
-      // Draw through remaining points
       for (let i = 1; i < stroke.length; i++) {
-        const x = stroke[i][0] * logicalWidth * scale + offsetX;
-        const y = stroke[i][1] * logicalHeight * scale + offsetY;
+        const x = stroke[i][0] * this.logicalWidth * scale + offsetX;
+        const y = stroke[i][1] * this.logicalHeight * scale + offsetY;
         this.ctx.lineTo(x, y);
       }
 
@@ -211,19 +192,62 @@ export class CanvasInput {
     }
   }
 
-  /**
-   * Clear and redraw with a guide.
-   */
   clearAndDrawGuide(strokes: number[][][]): void {
     this.clear();
     this.drawGuide(strokes);
   }
 
+  /** Reset the tracked position between playback strokes. */
+  startPlaybackStroke(): void {
+    this.lastPlaybackPoint = null;
+  }
+
   /**
-   * Check if currently drawing.
+   * Draw one point of an animating playback stroke.
+   * Coordinates are normalized (0–1), matching the guide's coordinate space.
+   * Draws a glowing line from the previous point and a bright dot at the tip.
    */
+  drawPlaybackPoint(normX: number, normY: number, pressure = 0.6): void {
+    const padding = 0.1;
+    const scale = 1 - padding * 2;
+    const x = normX * this.logicalWidth * scale + padding * this.logicalWidth;
+    const y = normY * this.logicalHeight * scale + padding * this.logicalHeight;
+    const lineWidth = pressure * 6 + 2;
+
+    this.ctx.save();
+
+    if (this.lastPlaybackPoint) {
+      this.ctx.shadowColor = 'rgba(201, 70, 61, 0.7)';
+      this.ctx.shadowBlur = 14;
+      this.ctx.strokeStyle = 'rgba(232, 228, 220, 0.95)';
+      this.ctx.lineWidth = lineWidth;
+      this.ctx.lineCap = 'round';
+      this.ctx.lineJoin = 'round';
+      this.ctx.beginPath();
+      this.ctx.moveTo(this.lastPlaybackPoint.x, this.lastPlaybackPoint.y);
+      this.ctx.lineTo(x, y);
+      this.ctx.stroke();
+    }
+
+    // Glowing tip dot
+    this.ctx.shadowColor = '#c9463d';
+    this.ctx.shadowBlur = 28;
+    this.ctx.fillStyle = '#ffffff';
+    this.ctx.beginPath();
+    this.ctx.arc(x, y, lineWidth / 2 + 1, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    this.ctx.restore();
+
+    this.lastPlaybackPoint = { x, y };
+  }
+
+  /** Remove all event listeners. Call when tearing down this instance. */
+  destroy(): void {
+    window.removeEventListener('resize', this.resizeHandler);
+  }
+
   get drawing(): boolean {
     return this.isDrawing;
   }
 }
-

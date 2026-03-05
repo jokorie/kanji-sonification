@@ -1,358 +1,353 @@
 /**
  * Kanji Sonification - Main Entry Point
- * 
+ *
  * Wires together canvas input → feature extraction → audio synthesis
  */
 
 import { StrokePoint, DEFAULT_SYNTH_CONFIG } from './types';
 import { StreamingFeatureExtractor } from './features/kinematics';
-import { mapFeaturesToSynthParams } from './audio/mapping';
+import { mapFeaturesToSynthParams, yToPitch, forceToAmplitude } from './audio/mapping';
 import { KanjiSynth } from './audio/synth';
 import { CanvasInput } from './canvas/input';
 import { TemplatePlayer } from './templates/playback';
-import { getTemplate } from './templates/kanji-data';
+import { getTemplate, getAvailableCharacters } from './templates/kanji-data';
 
 // ============================================================
-// APP STATE
+// APP
 // ============================================================
 
-let synth: KanjiSynth;
-let featureExtractor: StreamingFeatureExtractor;
-let canvasInput: CanvasInput;
-let templatePlayer: TemplatePlayer;
-let pointCount = 0;
-let strokeSoundStarted = false; // Track if we've started sound for current stroke
-let recordedStrokes: StrokePoint[][] = [];
-let currentRecordedStroke: StrokePoint[] | null = null;
-let isRecordingPlayback = false;
-let recordingAbortController: AbortController | null = null;
+class App {
+  private synth: KanjiSynth;
+  private featureExtractor: StreamingFeatureExtractor;
+  private canvasInput: CanvasInput;
+  private templatePlayer: TemplatePlayer;
 
-// DOM Elements
-let statusDot: HTMLElement;
-let statusText: HTMLElement;
-let pointCountEl: HTMLElement;
-let pressureValueEl: HTMLElement;
-let pressureFill: HTMLElement;
-let frequencyValueEl: HTMLElement;
-let kanjiSelect: HTMLSelectElement;
-let playBtn: HTMLButtonElement;
-  let replayBtn: HTMLButtonElement;
+  private pointCount = 0;
+  private strokeSoundStarted = false;
+  private recordedStrokes: StrokePoint[][] = [];
+  private currentRecordedStroke: StrokePoint[] | null = null;
+  private isRecordingPlayback = false;
+  private recordingAbortController: AbortController | null = null;
 
-// ============================================================
-// INITIALIZATION
-// ============================================================
+  // DOM elements
+  private statusDot: HTMLElement;
+  private statusText: HTMLElement;
+  private pointCountEl: HTMLElement;
+  private pressureValueEl: HTMLElement;
+  private pressureFill: HTMLElement;
+  private frequencyValueEl: HTMLElement;
+  private kanjiSelect: HTMLSelectElement;
+  private playBtn: HTMLButtonElement;
+  private replayBtn: HTMLButtonElement;
 
-function initializeUI(): void {
-  // Get DOM elements
-  statusDot = document.getElementById('statusDot')!;
-  statusText = document.getElementById('statusText')!;
-  pointCountEl = document.getElementById('pointCount')!;
-  pressureValueEl = document.getElementById('pressureValue')!;
-  pressureFill = document.getElementById('pressureFill')!;
-  frequencyValueEl = document.getElementById('frequencyValue')!;
-  kanjiSelect = document.getElementById('kanjiSelect') as HTMLSelectElement;
-  playBtn = document.getElementById('playBtn') as HTMLButtonElement;
-  replayBtn = document.getElementById('replayBtn') as HTMLButtonElement;
+  constructor() {
+    this.synth = new KanjiSynth(DEFAULT_SYNTH_CONFIG);
+    this.featureExtractor = new StreamingFeatureExtractor(0.3);
+    this.templatePlayer = new TemplatePlayer(this.synth);
 
-  // Force blank (no-template) mode on initial load
-  kanjiSelect.value = '';
+    // DOM — queried once up front
+    this.statusDot = document.getElementById('statusDot')!;
+    this.statusText = document.getElementById('statusText')!;
+    this.pointCountEl = document.getElementById('pointCount')!;
+    this.pressureValueEl = document.getElementById('pressureValue')!;
+    this.pressureFill = document.getElementById('pressureFill')!;
+    this.frequencyValueEl = document.getElementById('frequencyValue')!;
+    this.kanjiSelect = document.getElementById('kanjiSelect') as HTMLSelectElement;
+    this.playBtn = document.getElementById('playBtn') as HTMLButtonElement;
+    this.replayBtn = document.getElementById('replayBtn') as HTMLButtonElement;
 
-  // Clear button
-  const clearBtn = document.getElementById('clearBtn')!;
-  clearBtn.addEventListener('click', () => {
-    pointCount = 0;
-    pointCountEl.textContent = '0';
-    recordedStrokes = [];
-    currentRecordedStroke = null;
-    // Clear and redraw the guide for currently selected kanji
-    updateKanjiGuide();
-  });
+    const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+    this.canvasInput = new CanvasInput(canvas, {
+      onPoint: p => this.handlePoint(p),
+      onStrokeStart: () => this.handleStrokeStart(),
+      onStrokeEnd: () => this.handleStrokeEnd(),
+      onResize: () => this.updateKanjiGuide(),
+      drawOnCanvas: true,
+    });
 
-  // Update guide when kanji selection changes
-  kanjiSelect.addEventListener('change', () => {
-    // Switching kanji modes should discard previously recorded strokes
-    recordedStrokes = [];
-    currentRecordedStroke = null;
-    if (isRecordingPlayback) {
-      stopRecordingPlayback();
+    this.populateKanjiSelect();
+    this.bindUI();
+
+    // Force blank (no-template) mode on load
+    this.kanjiSelect.value = '';
+    this.updateKanjiGuide();
+  }
+
+  // ============================================================
+  // SETUP
+  // ============================================================
+
+  private populateKanjiSelect(): void {
+    const blank = document.createElement('option');
+    blank.value = '';
+    this.kanjiSelect.appendChild(blank);
+
+    for (const char of getAvailableCharacters()) {
+      const opt = document.createElement('option');
+      opt.value = char;
+      opt.textContent = char;
+      this.kanjiSelect.appendChild(opt);
     }
+  }
 
-    updateKanjiGuide();
-  });
+  // ============================================================
+  // UI BINDING
+  // ============================================================
 
-  // Play template button
-  playBtn.addEventListener('click', async () => {
-    const character = kanjiSelect.value;
+  private bindUI(): void {
+    document.getElementById('clearBtn')!.addEventListener('click', () => this.handleClear());
+
+    this.kanjiSelect.addEventListener('change', () => {
+      this.recordedStrokes = [];
+      this.currentRecordedStroke = null;
+      if (this.isRecordingPlayback) this.stopRecordingPlayback();
+      this.updateKanjiGuide();
+    });
+
+    this.playBtn.addEventListener('click', () => this.handlePlayBtn());
+    this.replayBtn.addEventListener('click', () => this.handleReplayBtn());
+
+    const initAudioBtn = document.getElementById('initAudioBtn')!;
+    const initModal = document.getElementById('initModal')!;
+
+    initAudioBtn.addEventListener('click', async () => {
+      try {
+        await this.synth.initialize();
+        initModal.classList.remove('visible');
+        this.statusDot.classList.add('connected');
+        this.statusText.textContent = 'READY';
+      } catch (e) {
+        console.error('Audio initialization failed:', e);
+        this.statusText.textContent = 'AUDIO ERROR';
+      }
+    });
+  }
+
+  // ============================================================
+  // EVENT HANDLERS
+  // ============================================================
+
+  private handleClear(): void {
+    this.pointCount = 0;
+    this.pointCountEl.textContent = '0';
+    this.recordedStrokes = [];
+    this.currentRecordedStroke = null;
+    this.updateKanjiGuide();
+  }
+
+  private async handlePlayBtn(): Promise<void> {
+    const character = this.kanjiSelect.value;
     if (!character) {
       console.warn('No kanji selected for template playback.');
       return;
     }
 
-    if (templatePlayer.playing) {
-      templatePlayer.stop();
-      playBtn.textContent = '▶ PLAY';
-      playBtn.classList.remove('playing');
-      statusDot.classList.remove('active');
+    if (this.templatePlayer.playing) {
+      this.templatePlayer.stop();
+      this.playBtn.textContent = '▶ PLAY';
+      this.playBtn.classList.remove('playing');
+      this.statusDot.classList.remove('active');
+      this.updateKanjiGuide();
     } else {
-      playBtn.textContent = '■ STOP';
-      playBtn.classList.add('playing');
-      
-      await templatePlayer.play(character, {
+      this.playBtn.textContent = '■ STOP';
+      this.playBtn.classList.add('playing');
+
+      // Reset canvas to just the faint guide before playback starts.
+      this.updateKanjiGuide();
+
+      await this.templatePlayer.play(character, {
         strokeDuration: 600,
         strokePause: 300,
         pressure: 0.6,
-        onStrokeStart: (i) => {
-          statusDot.classList.add('active');
+        onStrokeStart: i => {
+          this.statusDot.classList.add('active');
+          this.canvasInput.startPlaybackStroke();
           console.log(`Stroke ${i + 1} started`);
         },
-        onStrokeEnd: (i) => {
-          statusDot.classList.remove('active');
+        onStrokeEnd: i => {
+          this.statusDot.classList.remove('active');
           console.log(`Stroke ${i + 1} ended`);
         },
-        onPoint: (point) => {
-          frequencyValueEl.textContent = `${mapYToFreq(point.y).toFixed(0)}Hz`;
+        onPoint: (point, _strokeIndex) => {
+          this.frequencyValueEl.textContent =
+            `${yToPitch(point.y, DEFAULT_SYNTH_CONFIG.minFreq, DEFAULT_SYNTH_CONFIG.maxFreq, true).toFixed(0)}Hz`;
+          this.canvasInput.drawPlaybackPoint(point.x, point.y, point.force);
         },
         onComplete: () => {
-          playBtn.textContent = '▶ PLAY';
-          playBtn.classList.remove('playing');
-          statusDot.classList.remove('active');
-          console.log('Playback complete');
-        }
+          this.playBtn.textContent = '▶ PLAY';
+          this.playBtn.classList.remove('playing');
+          this.statusDot.classList.remove('active');
+        },
       });
     }
-  });
+  }
 
-  // Replay recorded strokes button
-  replayBtn.addEventListener('click', async () => {
-    if (isRecordingPlayback) {
-      stopRecordingPlayback();
+  private async handleReplayBtn(): Promise<void> {
+    if (this.isRecordingPlayback) {
+      this.stopRecordingPlayback();
       return;
     }
 
-    if (!recordedStrokes.length) {
+    if (!this.recordedStrokes.length) {
       console.warn('No recorded strokes to replay.');
       return;
     }
 
-    await playRecordedStrokes();
-  });
-
-  // Initialize synth on first interaction (required by browser autoplay policy)
-  const initAudioBtn = document.getElementById('initAudioBtn')!;
-  const initModal = document.getElementById('initModal')!;
-  
-  initAudioBtn.addEventListener('click', async () => {
-    await synth.initialize();
-    initModal.classList.remove('visible');
-    statusDot.classList.add('connected');
-    statusText.textContent = 'READY';
-  });
-}
-
-function initializeSynth(): void {
-  synth = new KanjiSynth(DEFAULT_SYNTH_CONFIG);
-  featureExtractor = new StreamingFeatureExtractor(0.3);
-  templatePlayer = new TemplatePlayer(synth);
-}
-
-function initializeCanvas(): void {
-  const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-  
-  canvasInput = new CanvasInput(canvas, {
-    onPoint: handlePoint,
-    onStrokeStart: handleStrokeStart,
-    onStrokeEnd: handleStrokeEnd,
-    drawOnCanvas: true,
-  });
-}
-
-// ============================================================
-// EVENT HANDLERS
-// ============================================================
-
-function handleStrokeStart(): void {
-  // Reset feature extractor for new stroke
-  featureExtractor.reset();
-  strokeSoundStarted = false; // Will start sound on first point with correct position
-  statusDot.classList.add('active');
-  currentRecordedStroke = [];
-}
-
-function handleStrokeEnd(): void {
-  synth.stopSound();
-  strokeSoundStarted = false;
-  statusDot.classList.remove('active');
-  pressureFill.style.height = '0%';
-
-  if (currentRecordedStroke && currentRecordedStroke.length > 0) {
-    recordedStrokes.push(currentRecordedStroke);
+    await this.playRecordedStrokes();
   }
-  currentRecordedStroke = null;
-}
 
-function handlePoint(point: StrokePoint): void {
-  // Update point count
-  pointCount++;
-  pointCountEl.textContent = pointCount.toString();
-  
-  // Update pressure display
-  pressureValueEl.textContent = point.force.toFixed(2);
-  pressureFill.style.height = `${point.force * 100}%`;
-
-  // Extract features
-  const features = featureExtractor.update(point);
-
-  // Record point for potential playback
-  if (currentRecordedStroke) {
-    currentRecordedStroke.push(point);
+  private handleStrokeStart(): void {
+    this.featureExtractor.reset();
+    this.strokeSoundStarted = false;
+    this.statusDot.classList.add('active');
+    this.currentRecordedStroke = [];
   }
-  
-  // For the first point of a stroke, snap to its position (no slide from previous stroke)
-  if (!strokeSoundStarted) {
-    // Compute initial params from the raw point position
-    const initialParams = {
-      frequency: mapYToFreq(point.y),
-      amplitude: mapForceToAmplitude(point.force),
-      pan: (point.x * 2) - 1, // Convert 0-1 to -1 to 1
-      vibratoDepth: 0,
-      vibratoRate: 5,
-    };
-    
-    // Start sound snapped to initial position
-    synth.startSound(initialParams);
-    strokeSoundStarted = true;
-    
-    frequencyValueEl.textContent = `${initialParams.frequency.toFixed(0)}Hz`;
-  } else if (features) {
-    // Subsequent points: use full feature extraction with smoothing
-    const synthParams = mapFeaturesToSynthParams(features);
-    synth.update(synthParams);
-    frequencyValueEl.textContent = `${synthParams.frequency.toFixed(0)}Hz`;
+
+  private handleStrokeEnd(): void {
+    this.synth.stopSound();
+    this.strokeSoundStarted = false;
+    this.statusDot.classList.remove('active');
+    this.pressureFill.style.height = '0%';
+
+    if (this.currentRecordedStroke && this.currentRecordedStroke.length > 0) {
+      this.recordedStrokes.push(this.currentRecordedStroke);
+    }
+    this.currentRecordedStroke = null;
   }
-}
 
-/**
- * Replay the recorded strokes using the same DSP pipeline.
- */
-async function playRecordedStrokes(): Promise<void> {
-  if (!recordedStrokes.length || isRecordingPlayback) return;
+  private handlePoint(point: StrokePoint): void {
+    this.pointCount++;
+    this.pointCountEl.textContent = this.pointCount.toString();
 
-  isRecordingPlayback = true;
-  recordingAbortController = new AbortController();
+    this.pressureValueEl.textContent = point.force.toFixed(2);
+    this.pressureFill.style.height = `${point.force * 100}%`;
 
-  const playbackExtractor = new StreamingFeatureExtractor(0.3);
+    const features = this.featureExtractor.update(point);
 
-  statusDot.classList.add('active');
+    if (this.currentRecordedStroke) {
+      this.currentRecordedStroke.push(point);
+    }
 
-  try {
-    for (let strokeIndex = 0; strokeIndex < recordedStrokes.length; strokeIndex++) {
-      const stroke = recordedStrokes[strokeIndex];
-      if (!stroke.length) continue;
-
-      playbackExtractor.reset();
-
-      // Start sound from first point of this stroke
-      const firstPoint = stroke[0];
+    if (!this.strokeSoundStarted) {
+      // Snap to the stroke's initial position — no slide from a previous stroke's endpoint.
       const initialParams = {
-        frequency: mapYToFreq(firstPoint.y),
-        amplitude: mapForceToAmplitude(firstPoint.force),
-        pan: (firstPoint.x * 2) - 1,
+        frequency: yToPitch(point.y, DEFAULT_SYNTH_CONFIG.minFreq, DEFAULT_SYNTH_CONFIG.maxFreq, true),
+        amplitude: forceToAmplitude(point.force, DEFAULT_SYNTH_CONFIG.minAmp, DEFAULT_SYNTH_CONFIG.maxAmp),
+        pan: point.x * 2 - 1,
         vibratoDepth: 0,
         vibratoRate: 5,
       };
-      synth.startSound(initialParams);
-      frequencyValueEl.textContent = `${initialParams.frequency.toFixed(0)}Hz`;
+      this.synth.startSound(initialParams);
+      this.strokeSoundStarted = true;
+      this.frequencyValueEl.textContent = `${initialParams.frequency.toFixed(0)}Hz`;
+    } else if (features) {
+      const synthParams = mapFeaturesToSynthParams(features);
+      this.synth.update(synthParams);
+      this.frequencyValueEl.textContent = `${synthParams.frequency.toFixed(0)}Hz`;
+    }
+  }
 
-      for (let i = 0; i < stroke.length; i++) {
-        if (recordingAbortController?.signal.aborted) {
-          throw new DOMException('Aborted', 'AbortError');
+  // ============================================================
+  // RECORDED PLAYBACK
+  // ============================================================
+
+  private async playRecordedStrokes(): Promise<void> {
+    if (!this.recordedStrokes.length || this.isRecordingPlayback) return;
+
+    this.isRecordingPlayback = true;
+    this.recordingAbortController = new AbortController();
+
+    const playbackExtractor = new StreamingFeatureExtractor(0.3);
+    this.statusDot.classList.add('active');
+
+    try {
+      for (let strokeIndex = 0; strokeIndex < this.recordedStrokes.length; strokeIndex++) {
+        const stroke = this.recordedStrokes[strokeIndex];
+        if (!stroke.length) continue;
+
+        playbackExtractor.reset();
+
+        const firstPoint = stroke[0];
+        const initialParams = {
+          frequency: yToPitch(firstPoint.y, DEFAULT_SYNTH_CONFIG.minFreq, DEFAULT_SYNTH_CONFIG.maxFreq, true),
+          amplitude: forceToAmplitude(firstPoint.force, DEFAULT_SYNTH_CONFIG.minAmp, DEFAULT_SYNTH_CONFIG.maxAmp),
+          pan: firstPoint.x * 2 - 1,
+          vibratoDepth: 0,
+          vibratoRate: 5,
+        };
+        this.synth.startSound(initialParams);
+        this.frequencyValueEl.textContent = `${initialParams.frequency.toFixed(0)}Hz`;
+
+        for (let i = 0; i < stroke.length; i++) {
+          if (this.recordingAbortController?.signal.aborted) {
+            throw new DOMException('Aborted', 'AbortError');
+          }
+
+          const point = stroke[i];
+          this.pressureValueEl.textContent = point.force.toFixed(2);
+          this.pressureFill.style.height = `${point.force * 100}%`;
+
+          const features = playbackExtractor.update(point);
+          if (features) {
+            const synthParams = mapFeaturesToSynthParams(features);
+            this.synth.update(synthParams);
+            this.frequencyValueEl.textContent = `${synthParams.frequency.toFixed(0)}Hz`;
+          }
+
+          if (i < stroke.length - 1) {
+            const dtMs = Math.max(0, (stroke[i + 1].t - point.t) * 1000);
+            await this.sleepWithAbort(dtMs, this.recordingAbortController.signal);
+          }
         }
 
-        const point = stroke[i];
+        this.synth.stopSound();
 
-        // Update UI to reflect playback state
-        pressureValueEl.textContent = point.force.toFixed(2);
-        pressureFill.style.height = `${point.force * 100}%`;
-
-        const features = playbackExtractor.update(point);
-        if (features) {
-          const synthParams = mapFeaturesToSynthParams(features);
-          synth.update(synthParams);
-          frequencyValueEl.textContent = `${synthParams.frequency.toFixed(0)}Hz`;
-        }
-
-        // Wait based on recorded timing between points
-        if (i < stroke.length - 1) {
-          const currentT = point.t;
-          const nextT = stroke[i + 1].t;
-          const dtMs = Math.max(0, (nextT - currentT) * 1000);
-          await sleepWithAbort(dtMs, recordingAbortController.signal);
+        if (strokeIndex < this.recordedStrokes.length - 1) {
+          await this.sleepWithAbort(200, this.recordingAbortController.signal);
         }
       }
-
-      synth.stopSound();
-
-      // Short pause between strokes
-      if (strokeIndex < recordedStrokes.length - 1) {
-        await sleepWithAbort(200, recordingAbortController.signal);
+    } catch (e) {
+      if ((e as DOMException).name !== 'AbortError') {
+        console.error('Recording playback error:', e);
       }
+    } finally {
+      this.synth.stopSound();
+      this.statusDot.classList.remove('active');
+      this.pressureFill.style.height = '0%';
+      this.isRecordingPlayback = false;
+      this.recordingAbortController = null;
     }
-  } catch (e) {
-    if ((e as DOMException).name !== 'AbortError') {
-      console.error('Recording playback error:', e);
+  }
+
+  private stopRecordingPlayback(): void {
+    if (!this.isRecordingPlayback) return;
+    this.recordingAbortController?.abort();
+  }
+
+  // ============================================================
+  // HELPERS
+  // ============================================================
+
+  private updateKanjiGuide(): void {
+    const character = this.kanjiSelect.value;
+    const template = getTemplate(character);
+
+    if (template) {
+      this.canvasInput.clearAndDrawGuide(template.strokes);
+    } else {
+      this.canvasInput.clear();
     }
-  } finally {
-    synth.stopSound();
-    statusDot.classList.remove('active');
-    pressureFill.style.height = '0%';
-    isRecordingPlayback = false;
-    recordingAbortController = null;
   }
-}
 
-function stopRecordingPlayback(): void {
-  if (!isRecordingPlayback) return;
-  recordingAbortController?.abort();
-}
-
-/**
- * Update the canvas guide to show the currently selected kanji
- */
-function updateKanjiGuide(): void {
-  const character = kanjiSelect.value;
-  const template = getTemplate(character);
-  
-  if (template) {
-    canvasInput.clearAndDrawGuide(template.strokes);
-    console.log(`📝 Showing guide for: ${character} (${template.meaning})`);
-  } else {
-    canvasInput.clear();
-  }
-}
-
-// Helper functions for initial point (before features are available)
-function mapYToFreq(y: number): number {
-  const minFreq = DEFAULT_SYNTH_CONFIG.minFreq;
-  const maxFreq = DEFAULT_SYNTH_CONFIG.maxFreq;
-  // Invert: top of screen (y=0) = high pitch, bottom (y=1) = low pitch
-  return maxFreq - y * (maxFreq - minFreq);
-}
-
-function mapForceToAmplitude(force: number): number {
-  const minAmp = DEFAULT_SYNTH_CONFIG.minAmp;
-  const maxAmp = DEFAULT_SYNTH_CONFIG.maxAmp;
-  const clamped = Math.max(0, Math.min(1, force));
-  return minAmp + Math.pow(clamped, 1.5) * (maxAmp - minAmp);
-}
-
-function sleepWithAbort(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(resolve, ms);
-    signal.addEventListener('abort', () => {
-      clearTimeout(timeout);
-      reject(new DOMException('Aborted', 'AbortError'));
+  private sleepWithAbort(ms: number, signal: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(resolve, ms);
+      signal.addEventListener('abort', () => {
+        clearTimeout(timeout);
+        reject(new DOMException('Aborted', 'AbortError'));
+      });
     });
-  });
+  }
 }
 
 // ============================================================
@@ -361,15 +356,6 @@ function sleepWithAbort(ms: number, signal: AbortSignal): Promise<void> {
 
 document.addEventListener('DOMContentLoaded', () => {
   console.log('🎌 Kanji Sonification starting...');
-  
-  initializeSynth();
-  initializeCanvas();
-  initializeUI();
-  
-  // Show initial kanji guide
-  updateKanjiGuide();
-  
+  new App();
   console.log('✅ Ready! Tap "Enable Audio" to start.');
 });
-
-

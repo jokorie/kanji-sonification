@@ -4,11 +4,11 @@
  * Plays back pre-recorded kanji strokes through the synthesizer.
  */
 
-import { StrokePoint } from '../types';
+import { StrokePoint, DEFAULT_SYNTH_CONFIG } from '../types';
 import { KanjiTemplate, getTemplate } from './kanji-data';
 import { KanjiSynth } from '../audio/synth';
 import { StreamingFeatureExtractor } from '../features/kinematics';
-import { mapFeaturesToSynthParams } from '../audio/mapping';
+import { mapFeaturesToSynthParams, yToPitch, forceToAmplitude } from '../audio/mapping';
 
 export interface PlaybackOptions {
   /** Duration per stroke in milliseconds */
@@ -110,14 +110,13 @@ export class TemplatePlayer {
 
     // Calculate time per point
     const timePerPoint = opts.strokeDuration / points.length;
-    const startTime = performance.now() / 1000;
 
     // Start synth with first point
     const firstPoint = this.createStrokePoint(points[0], 0, opts.pressure);
     const initialParams = {
-      frequency: this.mapYToFreq(firstPoint.y),
-      amplitude: this.mapForceToAmplitude(firstPoint.force),
-      pan: (firstPoint.x * 2) - 1,
+      frequency: yToPitch(firstPoint.y, DEFAULT_SYNTH_CONFIG.minFreq, DEFAULT_SYNTH_CONFIG.maxFreq, true),
+      amplitude: forceToAmplitude(firstPoint.force, DEFAULT_SYNTH_CONFIG.minAmp, DEFAULT_SYNTH_CONFIG.maxAmp),
+      pan: firstPoint.x * 2 - 1,
       vibratoDepth: 0,
       vibratoRate: 5,
     };
@@ -160,24 +159,6 @@ export class TemplatePlayer {
       altitude: Math.PI / 2,
       t,
     };
-  }
-
-  /**
-   * Map Y to frequency (same as main.ts)
-   */
-  private mapYToFreq(y: number): number {
-    const minFreq = 220;
-    const maxFreq = 880;
-    return maxFreq - y * (maxFreq - minFreq);
-  }
-
-  /**
-   * Map force to amplitude (same as main.ts)
-   */
-  private mapForceToAmplitude(force: number): number {
-    const minAmp = 0.1;
-    const maxAmp = 0.6;
-    return minAmp + Math.pow(force, 1.5) * (maxAmp - minAmp);
   }
 
   /**

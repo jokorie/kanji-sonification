@@ -58,6 +58,6 @@ export const DEFAULT_SYNTH_CONFIG: SynthConfig = {
   vibratoMaxDepth: 8,
   vibratoMinRate: 3,
   vibratoMaxRate: 7,
-  smoothingTime: 0.010, // 5ms - lower = less latency but more zipper noise
+  smoothingTime: 0.010, // 10ms - lower = less latency but more zipper noise
 };
 

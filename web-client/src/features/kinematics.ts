@@ -10,7 +10,6 @@ import { StrokePoint, PointFeatures } from '../types';
 /** State maintained for incremental feature extraction */
 interface StreamingState {
   previousPoint: StrokePoint | null;
-  previousDirection: number | null;
   pointHistory: StrokePoint[];
   smoothedSpeed: number;
   alpha: number; // EMA smoothing factor
@@ -88,7 +87,6 @@ export class StreamingFeatureExtractor {
   constructor(alpha: number = 0.3) {
     this.state = {
       previousPoint: null,
-      previousDirection: null,
       pointHistory: [],
       smoothedSpeed: 0,
       alpha,
@@ -98,7 +96,6 @@ export class StreamingFeatureExtractor {
   /** Reset state for a new stroke */
   reset(): void {
     this.state.previousPoint = null;
-    this.state.previousDirection = null;
     this.state.pointHistory = [];
     this.state.smoothedSpeed = 0;
   }
@@ -155,9 +152,7 @@ export class StreamingFeatureExtractor {
       altitude: point.altitude,
     };
 
-    // Update state
     this.state.previousPoint = point;
-    this.state.previousDirection = directionRad;
 
     return features;
   }
