@@ -1,0 +1,508 @@
+---
+description: Antipatterns and common errors to avoid
+alwaysApply: false
+---
+
+# Mistakes: Antipatterns & Common Errors
+
+**What this is:** Documented mistakes we've made in this codebase, with tests that caught them.
+
+**When to use:** Review this checklist before finalizing any feature or PR to catch common mistakes.
+
+---
+
+## Concurrency & Thread Safety
+
+### ❌ Race Conditions in Async Code
+**Pattern:** Accessing shared mutable state without locks in async functions
+
+**Example from this codebase:**
+```python
+# BAD: No lock protection
+async def handle_ticker_update(self, update):
+    self._ticker_cache[ticker] = update  # ← Concurrent access!
+    event_key = self._market_to_event.get(ticker)
+    clients = self._event_clients.get(event_key, set())
+
+# GOOD: Protected with lock
+async def handle_ticker_update(self, update):
+    async with self._lock:
+        self._ticker_cache[ticker] = update
+        event_key = self._market_to_event.get(ticker)
+        clients = set(self._event_clients.get(event_key, set()))  # Copy!
+    # I/O outside lock to avoid blocking
+    for ws in clients:
+        await ws.send_json(message)
+```
+
+**Test that caught it:**
+- Unit tests in `test_subscription_manager.py` pass with lock protection
+- `test_handle_ticker_update_routes_to_clients()` verifies thread-safe routing
+
+**Checklist:**
+- [ ] All shared state access protected by locks?
+- [ ] Copying collections before iterating during concurrent modifications?
+- [ ] I/O operations outside of locks to minimize contention?
+
+---
+
+## Null/None Checks
+
+### ❌ Missing Null Guards on Global State
+**Pattern:** Accessing global/module-level variables that may be `None` during initialization
+
+**Example from this codebase:**
+```python
+# BAD: No null check
+subscription_manager = None  # Set during startup
+
+async def handle_connection(websocket):
+    await websocket.accept()
+    # ← What if startup hasn't finished?
+    await subscription_manager.subscribe_client(...)  # AttributeError!
+
+# GOOD: Guard against None
+async def handle_connection(websocket):
+    await websocket.accept()
+    if subscription_manager is None:
+        await websocket.send_json({"type": "error", "message": "Server starting up..."})
+        await websocket.close()
+        return
+    await subscription_manager.subscribe_client(...)
+```
+
+**Critical locations:**
+- Exception handlers (especially disconnect handlers)
+- Early in request/connection lifecycle
+- Any code that runs before app initialization completes
+
+**Test that caught it:**
+- `test_connection_before_startup()` in `tests/unit/api/test_websocket.py`
+- Reproduces the race condition by setting `subscription_manager = None`
+
+**Checklist:**
+- [ ] All global/module-level state checked for `None` before access?
+- [ ] Graceful error messages when state not ready?
+- [ ] Exception handlers protected against `None` state?
+
+---
+
+## Data Format Consistency
+
+### ❌ Mixing Prefixed/Unprefixed Identifiers
+**Pattern:** Using inconsistent key formats across API boundaries
+
+**Example from this codebase:**
+```python
+# BAD: Mixed formats
+{
+    "event_key": "kalshi:KXSB-26",      # ← With prefix
+    "market_ticker": "KXSB-26-SEA",     # ← Without prefix (confusing!)
+    "market_key": "kalshi:KXSB-26-SEA"  # ← With prefix (redundant!)
+}
+
+# GOOD: Consistent format
+{
+    "event_key": "kalshi:KXSB-26",      # ← With prefix
+    "market_key": "kalshi:KXSB-26-SEA"  # ← With prefix (consistent!)
+}
+```
+
+**Test that verifies fix:**
+- `test_handle_subscribe_message()` in `tests/unit/api/test_websocket.py`
+- Asserts response contains `market_key` (not `market_ticker`)
+
+**Checklist:**
+- [ ] Consistent key naming across all API responses?
+- [ ] No redundant fields with different formats?
+- [ ] Keys match database schema format?
+- [ ] Platform prefix used consistently everywhere?
+
+### ❌ Incorrect Orderbook Data Structure
+**Pattern:** Concatenating bids and asks into single arrays, losing orderbook structure
+
+**Example from this codebase:**
+```python
+# BAD: Loses distinction between bids and asks
+def to_dict(self) -> dict:
+    return {
+        "market_ticker": self.market_ticker,
+        "yes_dollars": [[level.price, level.size] for level in self.yes_bids + self.yes_asks],  # ← Mixed!
+        "no_dollars": [[level.price, level.size] for level in self.no_bids + self.no_asks],
+    }
+```
+
+**How it breaks:**
+- Frontend expects separate bid/ask arrays to render orderbook properly
+- Bids (buyers) and asks (sellers) have different sorting requirements
+- Concatenating them creates ambiguous data structure
+- Orderbook UI can't distinguish which orders are bids vs asks
+- Price ladder rendering breaks (can't show bid/ask spread)
+
+**Test that verifies structure:**
+```python
+def test_orderbook_to_dict_separates_bids_asks():
+    """Test that to_dict() maintains bid/ask separation."""
+    orderbook = OrderbookSnapshot(
+        market_ticker="test",
+        yes_bids=[PriceLevel(price=0.6, size=100)],
+        yes_asks=[PriceLevel(price=0.65, size=50)],
+    )
+    
+    result = orderbook.to_dict()
+    
+    # Should have separate arrays
+    assert "yes_bids" in result
+    assert "yes_asks" in result
+    assert "no_bids" in result
+    assert "no_asks" in result
+    
+    # Should NOT concatenate them
+    assert "yes_dollars" not in result  # Old incorrect format
+    assert "no_dollars" not in result
+    
+    # Verify structure
+    assert result["yes_bids"] == [[0.6, 100]]
+    assert result["yes_asks"] == [[0.65, 50]]
+```
+
+**Fix: Separate Bid/Ask Arrays**
+```python
+# GOOD: Maintains orderbook structure
+def to_dict(self) -> dict:
+    return {
+        "market_ticker": self.market_ticker,
+        "yes_bids": [[level.price, level.size] for level in self.yes_bids],
+        "yes_asks": [[level.price, level.size] for level in self.yes_asks],
+        "no_bids": [[level.price, level.size] for level in self.no_bids],
+        "no_asks": [[level.price, level.size] for level in self.no_asks],
+    }
+```
+
+**Why this matters:**
+- Orderbook UI needs to know which orders are bids (buy) vs asks (sell)
+- Bids sorted descending (best bid = highest price)
+- Asks sorted ascending (best ask = lowest price)
+- Spread calculated as `best_ask - best_bid`
+- Maintaining structure allows proper rendering and analysis
+
+**Checklist:**
+- [ ] Orderbook data structures maintain bid/ask separation?
+- [ ] No concatenation of bids and asks into single arrays?
+- [ ] Frontend receives data in expected format (check console/network tab)?
+- [ ] Sorting preserved (bids descending, asks ascending)?
+
+---
+
+## Global State Initialization
+
+### ❌ Race Condition in Singleton Initialization
+**Pattern:** Multiple coroutines initialize a global singleton simultaneously
+
+**Example from this codebase:**
+```python
+# BAD: No lock protection during initialization
+_pool: Optional[asyncpg.Pool] = None
+
+async def get_db_pool():
+    global _pool
+    if _pool is None:  # ← Multiple coroutines see None
+        _pool = await asyncpg.create_pool(...)  # ← All create pools!
+    return _pool
+```
+
+**How it breaks:**
+- 5 concurrent calls to `get_db_pool()` create 5 separate connection pools
+- Wastes resources (2x-5x connections to database)
+- One pool overwrites another, leaking connections
+- Unpredictable which pool gets used
+
+**Test that caught it:**
+- `test_concurrent_pool_creation_race_condition()` in `tests/unit/test_database.py`
+- Launches 5 concurrent calls and verifies only 1 pool created
+
+**Fix: Double-Checked Locking Pattern**
+```python
+# GOOD: Lock prevents concurrent initialization
+_pool: Optional[asyncpg.Pool] = None
+_pool_lock: asyncio.Lock = asyncio.Lock()
+
+async def get_db_pool():
+    global _pool
+    
+    # Fast path: already initialized (no lock for reads)
+    if _pool is not None:
+        return _pool
+    
+    # Slow path: acquire lock for initialization
+    async with _pool_lock:
+        # Double-check: another coroutine might have initialized
+        if _pool is not None:
+            return _pool
+        
+        _pool = await asyncpg.create_pool(...)
+        return _pool
+```
+
+**Why double-checked locking?**
+1. **First check (outside lock)**: Avoids lock overhead for common case (already initialized)
+2. **Lock acquisition**: Serializes competing initializers
+3. **Second check (inside lock)**: Prevents duplicate initialization after lock acquired
+
+**Checklist:**
+- [ ] All global singletons protected by locks during initialization?
+- [ ] Using double-checked locking pattern for performance?
+- [ ] Lock declared at module level (not inside function)?
+- [ ] Test with concurrent access to verify single initialization?
+
+### ❌ Creating asyncio.Lock at Module Level
+**Pattern:** Creating `asyncio.Lock()` outside of async context (no event loop)
+
+**Example from this codebase:**
+```python
+# BAD: Crashes on import if no event loop exists
+_pool: Optional[asyncpg.Pool] = None
+_pool_lock: asyncio.Lock = asyncio.Lock()  # ← RuntimeError: no current event loop!
+
+async def get_pool():
+    async with _pool_lock:  # Lock was never created
+        ...
+```
+
+**How it breaks:**
+- Module imported during normal startup (no event loop)
+- `asyncio.Lock()` requires a running event loop
+- Raises `RuntimeError: There is no current event loop`
+- Application crashes on import before any code runs
+
+**Test that caught it:**
+- Import test in `test_database.py` verifies module can be imported
+- `test_concurrent_pool_creation_race_condition()` verifies lock works
+
+**Fix: Lazy Lock Initialization**
+```python
+# GOOD: Create lock when first needed (inside async context)
+_pool: Optional[asyncpg.Pool] = None
+_pool_lock: Optional[asyncio.Lock] = None
+
+def _get_lock() -> asyncio.Lock:
+    """Lazily initialize the lock when needed (requires event loop)."""
+    global _pool_lock
+    if _pool_lock is None:
+        _pool_lock = asyncio.Lock()
+    return _pool_lock
+
+async def get_pool():
+    async with _get_lock():  # Lock created on first use
+        ...
+```
+
+**Why this works:**
+- Lock not created until `_get_lock()` is called
+- `_get_lock()` only called from async context (event loop exists)
+- Module can be imported safely at any time
+- Lock still provides thread-safety once created
+
+**Checklist:**
+- [ ] No `asyncio.Lock()`, `asyncio.Event()`, or `asyncio.Semaphore()` at module level?
+- [ ] All asyncio primitives created inside async functions or lazy helpers?
+- [ ] Module can be imported without event loop (test with plain `import`)?
+
+---
+
+## Bug-Fixing Workflow
+
+When a bug or issue is identified, follow this workflow (for non-trivial bugs):
+
+### 1. Log the Issue
+Document the problem in this file with:
+- Clear description of the bug
+- ❌ BAD example showing the problematic code
+- Why it's a problem (what breaks, when it breaks)
+
+### 2. Write a Test First
+Create a test that **reproduces the bug**:
+```python
+# Example: Test for null subscription_manager bug
+@pytest.mark.asyncio
+async def test_connection_before_startup():
+    """Test WebSocket connection when subscription_manager is None"""
+    ws_module.subscription_manager = None  # Simulate uninitialized state
+    
+    await ws_module.handle_websocket_connection(mock_websocket)
+    
+    # Should handle gracefully, not crash
+    mock_websocket.send_json.assert_called_once()
+    assert "starting up" in call_args["message"].lower()
+```
+
+**Why test first?**
+- Confirms the bug actually exists
+- Provides a clear success criteria
+- Prevents regressions
+- Documents the bug for future developers
+
+### 3. Fix the Issue
+Implement the fix guided by the failing test:
+```python
+# GOOD: Guard against None
+if subscription_manager is None:
+    await websocket.send_json({"type": "error", "message": "Server starting up..."})
+    await websocket.close()
+    return
+```
+
+### 4. Verify with Test
+Run the test to confirm:
+- ✅ Test now passes
+- ✅ Bug is actually fixed
+- ✅ Fix doesn't break other tests
+
+### 5. Update Documentation
+Add the ✅ GOOD example to this file with checklist items.
+
+---
+
+**When to skip this workflow:**
+- Typos or trivial formatting issues
+- Single-line obvious fixes
+- Documentation-only changes
+
+**When to always follow this:**
+- Race conditions
+- Null pointer issues
+- Edge cases that caused crashes
+- Anything that would silently fail in production
+
+---
+
+## Worker Process Management
+
+### ❌ Multiple Worker Processes with Redundant/Old Code
+**Pattern:** Running multiple instances of the same worker (discovery, poller, embedding) simultaneously, especially old deprecated versions alongside new ones
+
+**Example from this codebase:**
+The old `aggregator.main --discovery` and `aggregator.main --embedder` were running alongside the new `run_poller.py` and `run_embedding.py`. The old code:
+- Used `aggregator.models.MarketData` which could return `None` for `category`
+- Inserted markets with NULL category values, violating `NOT NULL` constraints in `markets_prod_v2`
+- Created a database hammering loop with 50+ constraint violations per second
+- Wasted CPU and disk I/O on continuous error retries
+
+**How it breaks:**
+- Duplicate inserts to the same database from multiple versions
+- Old code paths may have bugs fixed in new versions
+- Database constraint violations from old data models
+- High CPU/disk I/O from repeated errors and retries
+- Difficult to diagnose because logs are split across multiple processes
+
+**Evidence from this codebase:**
+- 4 processes running: `aggregator.main --discovery` × 2, `aggregator.main --embedder` × 2
+- Each attempted to insert markets with category=NULL
+- PostgreSQL logs showed 50+ `NOT NULL constraint` violations per second
+- After killing processes, CPU and I/O returned to normal
+- `ROOT_CAUSE_ANALYSIS.md` documents the incident
+
+**Fix: Single Source of Truth**
+```python
+# ONLY run the new entry points, never mix old and new:
+# ✅ GOOD - Production workers (new backend code)
+# python run_poller.py all              # Polling
+# python run_embedding.py               # Embedding generation
+# python run_coupling.py                # Market coupling
+
+# ❌ BAD - Old entry point (deprecated aggregator)
+# python -m aggregator.main --discovery
+# python -m aggregator.main --embedder
+# python -m aggregator.main --pollers
+```
+
+**Prevention:**
+1. Verify only `run_*.py` processes are running:
+   ```bash
+   ps aux | grep -E "python.*run_|python.*aggregator" | grep -v grep
+   ```
+
+2. Check which processes are connecting to Supabase:
+   ```sql
+   SELECT pid, application_name, state FROM pg_stat_activity 
+   WHERE datname = 'postgres' ORDER BY pid;
+   ```
+
+3. Before deploying new worker code, ensure old processes are fully decommissioned
+
+4. Add to deployment/startup checklists: "Verify no old `aggregator.main` processes running"
+
+**When to worry about this:**
+- If database CPU/I/O suddenly spikes
+- If constraint violations appear in PostgreSQL logs
+- When running multiple similar workers on the same database
+- During migrations from old to new worker code
+
+**Checklist:**
+- [ ] Only modern `run_*.py` entry points are configured to run?
+- [ ] No `aggregator.main` entry points active in production?
+- [ ] Database CPU/I/O normal (< 50% sustained)?
+- [ ] No constraint violation errors in PostgreSQL logs?
+- [ ] If migrating workers, old processes confirmed fully stopped?
+
+---
+
+## Before Shipping Checklist
+
+Use this checklist before creating a PR or marking a feature complete:
+
+### Concurrency
+- [ ] Reviewed all `async def` functions for shared state access
+- [ ] All dictionaries/sets that could be modified concurrently have lock protection
+- [ ] No locks held during I/O operations (use copy pattern)
+
+### Initialization & Null Safety
+- [ ] All global/module-level variables checked for `None` before access
+- [ ] Exception handlers (especially disconnect/cleanup) handle `None` gracefully
+- [ ] Early-lifecycle code (startup, first request) has `None` guards
+
+### Data Consistency
+- [ ] API request/response formats reviewed for consistency
+- [ ] No mixing of prefixed/unprefixed identifiers
+- [ ] Field names consistent across endpoints
+- [ ] Database schema matches API format
+
+### Testing
+- [ ] Unit tests pass non-trivially (verify with actual data)
+- [ ] Edge cases tested (None state, empty collections, concurrent access)
+- [ ] Integration tests receive and process real data
+
+---
+
+## Adding New Patterns
+
+When you discover a new error pattern, follow the **Bug-Fixing Workflow** above, then:
+
+1. Add pattern to this file with clear ❌ BAD / ✅ GOOD examples
+2. Add specific checklist items
+3. Reference the specific bug/PR where it was discovered
+4. Keep examples from this codebase when possible
+5. Include the test that caught/verified it
+
+**Example format:**
+```markdown
+### ❌ Your Bug Pattern Name
+**Pattern:** Brief description
+
+**Example from this codebase:**
+[BAD code example]
+
+**How it breaks:** What happens when this fails
+
+**Test that caught it:**
+- `test_name_here()` in `path/to/test.py`
+
+**Fix:**
+[GOOD code example]
+
+**Checklist:**
+- [ ] Specific check 1
+- [ ] Specific check 2
+```
+
+**This is a living document. Update it whenever we catch a new class of bugs!**

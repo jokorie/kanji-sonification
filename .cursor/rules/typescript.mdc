@@ -1,0 +1,283 @@
+---
+description: TypeScript strict mode, avoid any, use unknown for untrusted data, proper type guards
+globs: **/*.{ts,tsx}
+---
+# TypeScript Best Practices
+
+## Enable Strict Mode
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "allowJs": true,
+    "checkJs": true
+  }
+}
+```
+
+## Define Clear Types
+
+**Interfaces for objects:**
+```typescript
+interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  age?: number; // Optional
+}
+```
+
+**Type aliases for unions:**
+```typescript
+type ID = string | number;
+type UserRole = "admin" | "user" | "guest";
+type Coords = [number, number];
+```
+
+## Avoid `any`, Use `unknown`
+
+❌ **BAD: Using any**
+```typescript
+function process(data: any) { // Bypasses all checks
+  console.log(data.foo.bar); // Could crash
+}
+```
+
+✅ **GOOD: Using unknown**
+```typescript
+function process(data: unknown) {
+  if (typeof data === 'object' && data !== null && 'foo' in data) {
+    console.log(data.foo);
+  }
+}
+```
+
+## Type Guards
+
+**For primitives:**
+```typescript
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
+}
+```
+
+**For custom objects:**
+```typescript
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+}
+
+function isProduct(obj: unknown): obj is Product {
+  return (
+    typeof obj === 'object' && obj !== null &&
+    'id' in obj && typeof obj.id === 'string' &&
+    'name' in obj && typeof obj.name === 'string' &&
+    'price' in obj && typeof obj.price === 'number'
+  );
+}
+
+// Usage
+if (isProduct(apiResponse)) {
+  console.log(apiResponse.name); // Type-safe
+}
+```
+
+## Prefer Union Types over Enums
+
+❌ **BAD: Numeric enums**
+```typescript
+enum Status { Active, Inactive } // Can be any number at runtime
+```
+
+✅ **GOOD: String literal unions**
+```typescript
+type Status = 'active' | 'inactive' | 'pending';
+
+// Or const enum if needed
+const enum Role {
+  Admin = "admin",
+  User = "user",
+}
+```
+
+## Generics
+
+```typescript
+function identity<T>(arg: T): T {
+  return arg;
+}
+
+const num = identity(123); // T = number
+const str = identity("hello"); // T = string
+```
+
+## Naming & Organization
+
+1. **Named exports only** - No default exports
+2. **Group imports** - Libraries → absolute → relative
+3. **Use path aliases** - `@/components` not `../../components`
+
+```typescript
+// GOOD
+import React from 'react';
+import { useSelector } from 'react-redux';
+
+import { API_URL } from '@/config';
+import { selectUser } from '@/store';
+
+import { Button } from './Button';
+import { formatDate } from '../utils';
+```
+
+## Async State Management & Cleanup Patterns
+
+### Rule 1: Store Cleanup Functions from Callbacks
+
+When registering callbacks that return cleanup functions, **always store them** for proper teardown.
+
+❌ **BAD: Memory leak - cleanup function ignored**
+```typescript
+function setupListener() {
+  // Unsubscribe function is never stored!
+  api.onUpdate((data) => {
+    console.log(data);
+  });
+}
+```
+
+✅ **GOOD: Store and use cleanup function**
+```typescript
+let unsubscribe: (() => void) | null = null;
+
+function setupListener() {
+  unsubscribe = api.onUpdate((data) => {
+    console.log(data);
+  });
+}
+
+function cleanup() {
+  unsubscribe?.();
+  unsubscribe = null;
+}
+```
+
+### Rule 2: Check State After Async Operations (Reference Counting)
+
+When managing subscriptions with async operations, **always re-check state** after promises resolve to handle race conditions.
+
+❌ **BAD: Race condition - component may have unmounted**
+```typescript
+function subscribe(id: string) {
+  refCount.set(id, (refCount.get(id) || 0) + 1);
+  
+  api.connect().then(() => {
+    api.subscribe(id); // WRONG: might be stale
+  });
+}
+```
+
+✅ **GOOD: Re-check state after promise**
+```typescript
+function subscribe(id: string) {
+  const newCount = (refCount.get(id) || 0) + 1;
+  refCount.set(id, newCount);
+  
+  if (newCount === 1) {
+    api.connect().then(() => {
+      // Double-check subscription is still needed
+      if ((refCount.get(id) || 0) > 0) {
+        api.subscribe(id);
+      }
+    });
+  }
+}
+```
+
+### Rule 3: Clear Stale State on Re-subscription
+
+When subscription sets change, **clear stale data** to prevent accumulating old state.
+
+❌ **BAD: Stale prices accumulate**
+```typescript
+useEffect(() => {
+  const unsubscribe = subscribe(tickers, (update) => {
+    setPrices(prev => ({ ...prev, [update.id]: update.price }));
+  });
+  return unsubscribe;
+}, [tickersKey]);
+```
+
+✅ **GOOD: Clear prices when tickers change**
+```typescript
+useEffect(() => {
+  // Clear stale data first
+  setPrices({});
+  
+  const unsubscribe = subscribe(tickers, (update) => {
+    setPrices(prev => ({ ...prev, [update.id]: update.price }));
+  });
+  return unsubscribe;
+}, [tickersKey]);
+```
+
+### Rule 4: Guard WebSocket Operations with Connection Checks
+
+Always verify WebSocket state before sending messages - async operations may complete after disconnect.
+
+❌ **BAD: Assumes socket is open**
+```typescript
+function sendMessage(data: any) {
+  socket.send(JSON.stringify(data)); // May throw if closed
+}
+```
+
+✅ **GOOD: Guard with state check**
+```typescript
+function sendMessage(data: any) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    console.error('Not connected');
+    return;
+  }
+  socket.send(JSON.stringify(data));
+}
+```
+
+### Rule 5: Stable Dependencies in useEffect
+
+Use stable keys (sorted, stringified) instead of array length for dependency tracking.
+
+❌ **BAD: Length doesn't detect changes**
+```typescript
+useEffect(() => {
+  subscribe(marketIds); // Won't re-run if IDs change but length stays same
+}, [marketIds.length]);
+```
+
+✅ **GOOD: Stable string key**
+```typescript
+const marketKey = useMemo(
+  () => [...marketIds].sort().join(','),
+  [marketIds]
+);
+
+useEffect(() => {
+  subscribe(marketIds);
+}, [marketKey]);
+```
+
+## Code Review Checklist
+
+When reviewing async/WebSocket code:
+
+- [ ] All callback registration functions store their cleanup return values
+- [ ] Reference counts are re-checked after promises resolve
+- [ ] State is cleared when subscription sets change (useEffect)
+- [ ] WebSocket operations guard against closed connections
+- [ ] useEffect dependencies use stable keys, not array lengths
+- [ ] Memory leaks: Every `on*()` call has corresponding cleanup
+- [ ] Race conditions: Async operations verify state is still valid

@@ -1,0 +1,37 @@
+---
+description: How to interact with the user
+alwaysApply: true
+---
+
+# Cursor Etiquette
+
+## Suggesting New Rules
+
+When making a change that reflects a reusable pattern or architectural decision that could apply elsewhere in the codebase, ask the user if they'd like to capture it as a cursor rule. Only suggest this for non-obvious, deliberate design choices—not routine code changes.
+
+## Pre-Flight Checklist
+
+**Before finalizing any feature or PR:** Review `.cursor/rules/mistakes.mdc` to catch common mistakes proactively.
+
+## Big Feature Workflow
+
+For substantial features or refactoring work, follow this workflow:
+
+1. **Discussion** - Back and forth conversation to understand requirements, constraints, and approach
+2. **Plan** - Create a detailed plan (after user asks for it) outlining the approach, structure, and key decisions
+3. **Write Tests First** - Write tests that define the expected behavior (TDD approach)
+4. **Implement** - Write the implementation to make tests pass
+5. **Verify** - Run tests to ensure implementation matches expectations
+
+**Don't skip steps** - Wait for explicit instruction to move to the next phase (e.g., "make a plan", "write tests", "implement").
+
+## Planning & Claims Validation
+
+When creating implementation plans or making technical claims:
+- **Validate with real data before proposing** - Don't infer data structures from code alone
+- If claiming "API returns data in format XYZ", verify by:
+  - Reading actual API response samples/fixtures
+  - Checking test data
+  - Running quick exploration scripts if needed
+- **Example**: Don't say "orderbook is structured as `{bids: [], asks: []}`" without seeing actual API response
+- Plans should be grounded in observable reality, not assumptions

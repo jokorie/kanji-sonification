@@ -1,0 +1,58 @@
+---
+description: Core React Native patterns - StyleSheet, Platform APIs, accessibility, avoid class components
+globs: **/*.{ts,tsx}
+---
+# React Native Patterns
+
+## Styling Rules
+
+1. **Always use StyleSheet.create** - Co-locate in `.styles.ts` files
+2. **Never inline styles** - Performance penalty on every render
+3. **Platform-specific styles** - Use `Platform.select()`
+
+```typescript
+// MyComponent.styles.ts
+import { StyleSheet, Platform } from 'react-native';
+
+export const styles = StyleSheet.create({
+  container: {
+    padding: 16,
+    ...Platform.select({
+      ios: { shadowOpacity: 0.1 },
+      android: { elevation: 4 },
+    }),
+  },
+});
+```
+
+## Accessibility
+
+Add to all interactive elements:
+```typescript
+<TouchableOpacity
+  accessibilityRole="button"
+  accessibilityLabel="Submit form"
+>
+  <Text>Submit</Text>
+</TouchableOpacity>
+```
+
+## Common Pitfalls
+
+❌ **Never mutate state directly**
+```typescript
+user.name = 'Jane'; // BAD
+setUser(prev => ({ ...prev, name: 'Jane' })); // GOOD
+```
+
+❌ **Avoid && for conditional rendering**
+```typescript
+{count && <Text>{count}</Text>} // Can render 0
+{count ? <Text>{count}</Text> : null} // GOOD
+```
+
+❌ **No class components**
+```typescript
+class MyComponent extends Component {} // NEVER
+const MyComponent = () => {} // ALWAYS
+```

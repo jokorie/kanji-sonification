@@ -1,0 +1,64 @@
+---
+alwaysApply: true
+description: Store all monetary values in cents internally, convert to dollars only for display
+---
+
+# Currency Storage Rules
+
+## Core Principle
+All monetary values (prices, balances, P&L) are stored in **cents** internally. Convert to dollars only at the display layer.
+
+## Data Flow
+1. **Kalshi API** returns centi-cents (1/100 of a cent)
+2. **Position stream** converts to cents (`/ 100`)
+3. **TradingContext** stores everything in cents
+4. **Display components** use `formatDollars()` to show dollars
+
+## Formatting Utilities
+
+Import from `@/utils/formatCurrency`:
+
+```typescript
+import { formatDollars, formatDollarsWithSign, formatCents } from '@/utils/formatCurrency';
+
+formatDollars(1234)        // → "$12.34"
+formatDollarsWithSign(1234) // → "+$12.34"
+formatDollarsWithSign(-500) // → "-$5.00"
+formatCents(67)            // → "67¢"
+```
+
+## Examples
+
+❌ **BAD**: Storing dollars, converting at ingestion
+```typescript
+setState({ balance: kalshiBalance.balance / 100 }); // Converts to dollars
+<Text>${balance.toFixed(2)}</Text>
+```
+
+✅ **GOOD**: Storing cents, converting at display
+```typescript
+setState({ balance: kalshiBalance.balance }); // Already cents
+<Text>{formatDollars(balance)}</Text>
+```
+
+❌ **BAD**: Inline dollar formatting
+```typescript
+<Text>{pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</Text>
+```
+
+✅ **GOOD**: Using format utilities
+```typescript
+<Text>{formatDollarsWithSign(pnl)}</Text>
+```
+
+## Interface Documentation
+
+Always document monetary fields with their unit:
+
+```typescript
+interface Position {
+  entryPrice: number;    // cents per contract
+  currentPrice: number;  // cents per contract
+  pnl: number;           // cents
+}
+```

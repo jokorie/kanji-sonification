@@ -1,0 +1,61 @@
+---
+description: Test fixtures must use realistic data from actual API responses
+globs: tests/**/*.py
+alwaysApply: false
+---
+# Test Fixtures: Use Real API Data
+
+## Rule
+
+Test fixtures that represent external API responses must be grounded in actual API data, not fabricated from documentation or schema assumptions.
+
+## Why
+
+APIs often behave differently from their docs:
+- Field shapes, nesting, or types may differ from documentation
+- Some fields may only appear in certain response variants
+- Participant ordering, ID formats, and key presence vary between API endpoints
+
+Fabricated fixtures can cause tests to pass while the real integration fails — exactly the bug this rule prevents.
+
+## How
+
+1. **Capture a real response sample first.** Use a debug script or manual HTTP call to see what the API actually returns for a representative case.
+2. **Copy real values into fixtures** — real IDs, real field names, real shapes. Substitute only what's necessary for the test (e.g. use a different athlete ID for a second test case, but keep the same structure).
+3. **Document the source.** Add a comment identifying the game, date, or endpoint the fixture was derived from.
+
+## Examples
+
+❌ **Fabricated** — matches documentation schema but not real response:
+```python
+play = {
+    "participants": [
+        {"athlete": {"$ref": "..."}, "type": "shooter"},
+        {"athlete": {"$ref": "..."}, "type": "assister"},
+    ]
+}
+```
+
+✅ **Grounded in real data** — derived from actual ESPN summary API response:
+```python
+# PHI vs MIL, game 401810686, Feb 25 2026
+play = {
+    "id": "401810686101",
+    "type": {"id": "95", "text": "Layup Shot"},
+    "text": "Kelly Oubre Jr. makes layup (Joel Embiid assists)",
+    "scoringPlay": True,
+    "shootingPlay": True,
+    "scoreValue": 2,
+    "participants": [
+        {"athlete": {"id": "3133603"}},
+        {"athlete": {"id": "3059318"}},
+    ],
+    "wallclock": "2026-02-25T00:30:00Z",
+}
+```
+
+## Scope
+
+This rule applies to any test that mocks or constructs data representing an external API response — ESPN, Kalshi, WebSocket messages, etc.
+
+Tests for internal logic with invented inputs (e.g. unit testing a state machine) are not subject to this rule.

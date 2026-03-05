@@ -1,0 +1,176 @@
+---
+description: Zustand state management - typed stores, slice pattern, selectors with shallow
+globs: **/*.{ts,tsx}
+---
+# Zustand Best Practices
+
+## Typed Store
+
+```typescript
+interface CounterState {
+  count: number;
+  increment: () => void;
+  decrement: () => void;
+}
+
+const useCounterStore = create<CounterState>((set) => ({
+  count: 0,
+  increment: () => set((state) => ({ count: state.count + 1 })),
+  decrement: () => set((state) => ({ count: state.count - 1 })),
+}));
+```
+
+## Slice Pattern (for large stores)
+
+```typescript
+// types.ts
+export interface AuthSlice {
+  user: User | null;
+  token: string | null;
+  login: (user: User, token: string) => void;
+  logout: () => void;
+}
+
+export interface UISlice {
+  isLoading: boolean;
+  setLoading: (loading: boolean) => void;
+}
+
+export type AppState = AuthSlice & UISlice;
+
+// slices/createAuthSlice.ts
+export const createAuthSlice: StateCreator<AppState, [], [], AuthSlice> = (set) => ({
+  user: null,
+  token: null,
+  login: (user, token) => set({ user, token }),
+  logout: () => set({ user: null, token: null }),
+});
+
+// slices/createUISlice.ts
+export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set) => ({
+  isLoading: false,
+  setLoading: (loading) => set({ isLoading: loading }),
+});
+
+// useAppStore.ts
+export const useAppStore = create<AppState>()((...a) => ({
+  ...createAuthSlice(...a),
+  ...createUISlice(...a),
+}));
+```
+
+## Functional Updates (Atomic Operations)
+
+```typescript
+// ✅ GOOD: Functional update (atomic, prevents race conditions)
+incrementAsync: async () => {
+  await someAsyncOperation();
+  set((state) => ({ count: state.count + 1 }));
+}
+
+// ❌ BAD: Using get() + set() (race condition prone)
+incrementAsync: async () => {
+  await someAsyncOperation();
+  const currentCount = get().count; // Can be stale between get and set
+  set({ count: currentCount + 1 });
+}
+
+// ❌ BAD: Mixing get() with action calls
+removeItem: (id: string) => {
+  const items = get().items; // ← Don't do this
+  set({ items: items.filter(i => i.id !== id) });
+}
+
+// ✅ GOOD: Use functional set() for all state mutations
+removeItem: (id: string) => {
+  set((state) => ({
+    items: state.items.filter(i => i.id !== id),
+  }));
+}
+```
+
+**Why atomic updates matter:**
+- Prevents race conditions when multiple actions fire in quick succession
+- Ensures state reads and writes are always consistent
+- Avoids stale closures in async operations
+
+## Selectors with Shallow
+
+```typescript
+import { shallow } from 'zustand/shallow';
+
+// ✅ Only re-renders if name or email change
+const { name, email } = useAppStore(
+  (state) => ({ name: state.user?.name, email: state.user?.email }),
+  shallow
+);
+
+// ✅ Only re-renders if token changes
+const token = useAppStore((state) => state.token);
+```
+
+## Middleware
+
+```typescript
+import { create } from 'zustand';
+import { persist, devtools, createJSONStorage } from 'zustand/middleware';
+import { immer } from 'zustand/middleware/immer';
+
+const useSettingsStore = create<SettingsState>()(
+  devtools(
+    persist(
+      immer((set) => ({
+        theme: 'light',
+        notifications: { enabled: true, sound: true },
+        setTheme: (theme) => set({ theme }),
+        toggleNotifications: () =>
+          set((state) => {
+            state.notifications.enabled = !state.notifications.enabled;
+          }),
+      })),
+      {
+        name: 'app-settings',
+        storage: createJSONStorage(() => localStorage),
+        version: 1,
+        partialize: (state) => ({ theme: state.theme }),
+      }
+    ),
+    { name: 'Settings Store', enabled: process.env.NODE_ENV === 'development' }
+  )
+);
+```
+
+## Async Actions
+
+```typescript
+interface UserState {
+  user: User | null;
+  loading: boolean;
+  error: string | null;
+  fetchUser: (userId: string) => Promise<void>;
+}
+
+const useUserStore = create<UserState>((set) => ({
+  user: null,
+  loading: false,
+  error: null,
+  fetchUser: async (userId) => {
+    set({ loading: true, error: null });
+    try {
+      const user = await fetchUser(userId);
+      set({ user, loading: false });
+    } catch (error) {
+      set({ error: error.message, loading: false });
+    }
+  },
+}));
+```
+
+## Core Rules
+
+1. **Always type your stores** - Use TypeScript interfaces
+2. **Use atomic functional updates** - Always use `set(state => ...)` for state mutations, never `get()` + `set()`
+3. **Use selectors** - With `shallow` for object/array returns
+4. **Initialize at module level** - Never inside components
+5. **Name hooks** - `use[Feature]Store`
+6. **Slice pattern** - For large/complex stores

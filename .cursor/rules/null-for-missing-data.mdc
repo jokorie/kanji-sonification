@@ -1,0 +1,247 @@
+# Null for Missing Data
+
+## Core Principle
+Always use `null` to represent missing, unavailable, or not-yet-loaded data. Never use arbitrary fallback values like `0`, `""`, or hardcoded defaults that mask the absence of data.
+
+## Why `null`?
+
+- **Explicit intent**: `null` means "not available", `0` means "zero" (a valid value)
+- **Type safety**: TypeScript enforces null checks before use
+- **Honest UI**: Can show "—" or loading state instead of misleading zeros
+- **Easier debugging**: Immediately see what data is missing
+- **Future-proof**: Easy to add data sources later without confusion
+
+## Rules
+
+### 1. Data Not Provided by Source
+
+When a data source (REST API, WebSocket, etc.) doesn't provide a field:
+
+```typescript
+// ✅ GOOD - Explicit that data isn't available
+interface PositionData {
+  volume: number | null;        // WebSocket provides, REST doesn't
+  restingOrders: number | null; // REST provides, WebSocket doesn't
+}
+
+function fromWebSocket(msg: any): PositionData {
+  return {
+    volume: msg.volume,       // WebSocket has this
+    restingOrders: null,      // WebSocket doesn't have this
+  };
+}
+
+function fromRestApi(pos: KalshiPosition): PositionData {
+  return {
+    volume: null,                          // REST doesn't have this
+    restingOrders: pos.resting_order_count, // REST has this
+  };
+}
+```
+
+```typescript
+// ❌ BAD - Misleading defaults
+function fromWebSocket(msg: any): PositionData {
+  return {
+    volume: msg.volume,
+    restingOrders: 0,  // BAD: 0 orders vs unavailable are different!
+  };
+}
+```
+
+### 2. Data Not Yet Loaded
+
+When data is being fetched asynchronously:
+
+```typescript
+// ✅ GOOD - null until loaded
+interface PositionData {
+  marketName: string | null;  // null until fetched from market API
+}
+
+const [balance, setBalance] = useState<number | null>(null);
+const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+```
+
+```typescript
+// ❌ BAD - Fake data while loading
+const [balance, setBalance] = useState<number>(0);  // BAD: 0 balance vs loading?
+const [currentPrice, setCurrentPrice] = useState<number>(0);  // BAD: 0¢ is a real price!
+```
+
+### 3. Calculated Values That Depend on Missing Data
+
+When a calculation can't be performed due to missing inputs:
+
+```typescript
+// ✅ GOOD - null when calculation impossible
+const unrealizedPnl = currentPrice !== null && costBasis !== null
+  ? (currentPrice * quantity) - costBasis
+  : null;
+
+const pnl = positions.reduce((sum, p) => {
+  if (p.pnl === null) return sum;  // Skip positions with unknown P&L
+  return sum + p.pnl;
+}, 0);
+```
+
+```typescript
+// ❌ BAD - Fake zero when we don't know
+const unrealizedPnl = currentPrice !== null
+  ? (currentPrice * quantity) - costBasis
+  : 0;  // BAD: Looks like break-even, but we don't know!
+```
+
+### 4. Optional/Nullable Props
+
+Component props that may not always be provided:
+
+```typescript
+// ✅ GOOD - Explicit about optional data
+interface MarketCardProps {
+  lastPrice: number | null;
+  volume24h: number | null;
+}
+
+function MarketCard({ lastPrice, volume24h }: MarketCardProps) {
+  return (
+    <>
+      <Text>{lastPrice !== null ? formatDollars(lastPrice) : '—'}</Text>
+      <Text>{volume24h !== null ? volume24h : '—'}</Text>
+    </>
+  );
+}
+```
+
+```typescript
+// ❌ BAD - Default to zero
+interface MarketCardProps {
+  lastPrice?: number;  // defaults to undefined
+  volume24h?: number;
+}
+
+function MarketCard({ lastPrice = 0, volume24h = 0 }: MarketCardProps) {
+  return (
+    <>
+      <Text>{formatDollars(lastPrice)}</Text>  {/* Shows $0.00 when unknown */}
+      <Text>{volume24h}</Text>  {/* Shows 0 when unknown */}
+    </>
+  );
+}
+```
+
+## Display Layer Patterns
+
+### Numeric Values
+
+```typescript
+// ✅ GOOD - Show em dash for null
+<Text>{volume !== null ? volume : '—'}</Text>
+<Text>{pnl !== null ? formatDollarsWithSign(pnl) : '—'}</Text>
+<Text>{lastPrice !== null ? formatDollars(lastPrice) : 'Loading...'}</Text>
+```
+
+### Conditional Rendering
+
+```typescript
+// ✅ GOOD - Only show if data exists
+{restingOrders !== null && restingOrders > 0 && (
+  <Badge>{restingOrders} open orders</Badge>
+)}
+
+{volume !== null && (
+  <Text>Volume: {volume}</Text>
+)}
+```
+
+### Aggregations
+
+```typescript
+// ✅ GOOD - Skip null values in calculations
+const totalVolume = positions
+  .filter(p => p.volume !== null)
+  .reduce((sum, p) => sum + p.volume!, 0);
+
+const avgPrice = prices.filter(p => p !== null).length > 0
+  ? prices.filter(p => p !== null).reduce((sum, p) => sum + p!, 0) / prices.filter(p => p !== null).length
+  : null;
+```
+
+## When to Use Fallbacks (Rare Cases)
+
+Only use fallback values in the **display layer** when necessary for UX:
+
+```typescript
+// ✅ ACCEPTABLE - Fallback only for display
+<Heading>{marketName ?? ticker}</Heading>  // Show ticker if name not loaded
+<Text>{description ?? 'No description available'}</Text>
+
+// But store as null internally:
+interface Market {
+  ticker: string;
+  marketName: string | null;  // null until loaded
+  description: string | null;
+}
+```
+
+## Anti-Patterns to Avoid
+
+### ❌ Magic Numbers
+
+```typescript
+// BAD - 0 means both "zero" and "unknown"
+volume: msg.volume || 0
+
+// BAD - -1 as "unknown" flag
+currentPrice: price ?? -1
+
+// BAD - Empty string for missing text
+marketName: name || ""
+```
+
+### ❌ Falsy Coercion
+
+```typescript
+// BAD - 0 is falsy, breaks null checks
+if (volume) { ... }  // Skips both null AND 0!
+
+// GOOD - Explicit null check
+if (volume !== null) { ... }  // Only skips null
+```
+
+### ❌ Hidden Defaults in Calculation
+
+```typescript
+// BAD - Silently treats missing data as zero
+const total = (a ?? 0) + (b ?? 0) + (c ?? 0);
+
+// GOOD - Return null if any input is null
+const total = a !== null && b !== null && c !== null
+  ? a + b + c
+  : null;
+```
+
+## TypeScript Configuration
+
+Ensure strict null checks are enabled in `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "strictNullChecks": true,
+    "strict": true
+  }
+}
+```
+
+## Summary
+
+| Scenario | Use `null` | Don't Use |
+|----------|-----------|-----------|
+| Data not provided by source | ✅ `volume: null` | ❌ `volume: 0` |
+| Data not yet loaded | ✅ `price: null` | ❌ `price: 0` |
+| Calculation impossible | ✅ `pnl: null` | ❌ `pnl: 0` |
+| Optional prop | ✅ `prop: T \| null` | ❌ `prop?: T` with default |
+| Display fallback | ✅ `{val ?? '—'}` | ❌ Store as `0` |
+
+**Golden Rule**: If you don't have the data, say so with `null`. Don't pretend you have it with a fake value.

@@ -29,6 +29,11 @@ output/
 *.aif
 *.mid
 
+# Node / frontend
+node_modules/
+dist/
+*.local
+
 # IDE
 .vscode/
 .idea/

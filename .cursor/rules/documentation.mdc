@@ -1,0 +1,46 @@
+---
+description: Documentation practices to prevent stale docs from confusing AI models
+alwaysApply: true
+---
+
+# Documentation: Minimize Staleness Risk
+
+## Problem
+
+Stale documentation confuses AI models and emboldens hallucinations. Detailed implementation docs go out of date silently — unlike code, they don't fail tests when they're wrong.
+
+## Principles
+
+1. **Code is the primary documentation.** Well-named modules, typed interfaces, and ABC docstrings are self-updating. Prefer these over prose files.
+2. **Never document implementation details in prose.** If someone wants to know how something works, they read the code. Docs explain *what* and *why*, not *how*.
+3. **Documentation should be high-level and stable.** A doc that needs updating every time you change a function signature is a liability.
+4. **No doc is better than a stale doc.**
+
+## README Tree Structure
+
+Use a tree of READMEs, each scoped to its directory:
+
+- **Top-level README**: What the project does, how to run it, what the top-level directories are for (one sentence each).
+- **Directory-level READMEs** (e.g., `src/providers/README.md`): What the subsystem does, what its modules are responsible for. No implementation details — just orientation.
+- **Never**: Function-level docs in markdown, API response schemas copied into prose, duplicating type definitions outside of code.
+
+## What to Document vs. What to Skip
+
+✅ **Do document:**
+- Architecture decisions and their rationale (why, not how)
+- Non-obvious domain concepts a new reader wouldn't infer from code
+- Setup/environment instructions (how to run, required env vars)
+- Which directory/module owns which responsibility (orientation)
+
+❌ **Don't document:**
+- Function signatures, parameters, or return types (that's what type hints are for)
+- Data structures or schemas (that's what Pydantic models are for)
+- Step-by-step flows that mirror the code (just read the code)
+- Anything that will break when the code changes without a corresponding test failure
+
+## Plan Documents (`.cursor/plans/`)
+
+Plan documents are ephemeral — they guide implementation, then become historical artifacts. After implementation:
+- Don't update them to match final code
+- Don't reference them as current documentation
+- Treat them as decision records, not living docs

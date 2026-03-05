@@ -1,0 +1,199 @@
+---
+description: GitHub issue format and workflow standards
+alwaysApply: true
+---
+
+# GitHub Issue Management
+
+This project uses standardized issue templates and labeling to maintain clear, actionable documentation.
+
+## AI Agent Protocol: Requesting Approval
+
+**CRITICAL: Before creating any GitHub issue, you MUST:**
+
+1. **Always ask the user for approval first** - Present a summary of the issue you plan to create
+2. **Show the full issue content** - Display the complete issue body so the user can review
+3. **Wait for explicit approval** - Don't proceed until the user confirms
+4. **Never auto-create issues** - Not even "obviously correct" ones without user consent
+
+**Exception:** Only skip approval if the user explicitly says "create the issue" or provides specific issue details to post.
+
+**Format for requesting approval:**
+
+```
+I'm about to create a new issue. Please review:
+
+**Title:** [Issue title]
+
+**Labels:** [label1, label2, ...]
+
+**Body:**
+[Full issue content here]
+
+Shall I proceed?
+```
+
+---
+
+## When Writing Issues
+
+### Templates
+
+Use the appropriate template when creating issues:
+
+**Bug Report** (`.github/ISSUE_TEMPLATE/bug.md`)
+- Use for reproducible bugs or unexpected behavior
+- Include: TL;DR, Symptoms, Root Cause Theory, Repro Steps, Environment, Potential Solutions
+
+**Feature Request** (`.github/ISSUE_TEMPLATE/feature.md`)
+- Use for new features or enhancements
+- Include: Use Case, Proposed Solution, Alternatives, Scope/Impact
+
+### Structure
+
+Every issue should have:
+
+```
+## TL;DR
+One sentence summary for quick scanning
+
+## Symptoms / Use Case
+Detailed observable behavior or problem statement
+
+## Suspected Root Cause (bugs) / Proposed Solution (features)
+Analysis or approach
+
+## Steps to Reproduce (bugs only)
+Clear numbered steps
+
+## Environment
+Platform (Frontend/Backend/Both), Component, Context
+
+## Potential Solutions (bugs) / Alternatives (features)
+Possible approaches (not prescriptive)
+
+## Additional Context
+Screenshots, logs, related issues, etc.
+```
+
+### Example: Real Issue #4
+
+Here's a real example of a well-structured bug report from this project (Issue #4):
+
+**Title:** There should be some verified mark somewhere indicating that you're connected to a kalshi account
+
+**Labels:** `bug`, `frontend`
+
+**Body:**
+```
+## TL;DR
+Add a visual indicator on the frontend showing that the user is successfully connected to their Kalshi account.
+
+## Symptoms
+Users have no clear visual feedback indicating whether they are authenticated and connected to the Kalshi trading account. Without this indicator, users may be unsure if they need to connect/authenticate their account to start trading.
+
+## Suspected Root Cause
+The application lacks a connection status indicator component. The authentication state exists in the backend/context but is not exposed with clear UI feedback to the user.
+
+## Steps to Reproduce
+1. Open the application
+2. Complete Kalshi authentication flow (or skip it)
+3. Navigate around the app
+4. Observe that there's no visual indicator showing the connection status
+
+## Environment
+- **Platform:** Frontend
+- **Component/System:** Navigation/Header, Settings
+- **Environment:** All environments
+- **Additional context:** Relates to user onboarding and account management UX
+
+## Potential Solutions
+- Add a verified badge/checkmark in the app header or navigation bar
+- Display connection status in the settings page
+- Add a connection banner at the top of the app when authenticated
+- Include status in the user profile/account settings section
+
+## Additional Context
+This is a UX enhancement that improves user confidence and clarity about their account connection status. Should be visible in a prominent location (header, top banner, or settings).
+```
+
+**What makes this a good issue:**
+- Clear TL;DR for quick understanding
+- Specific symptoms describing the user impact
+- Concrete reproduction steps
+- Multiple solution approaches (not just one)
+- Environmental context for the developer
+
+### Labeling
+
+Add **at least one** label from each category:
+
+| Category | Options |
+|----------|---------|
+| **Component** | `frontend`, `backend` |
+| **Type** | `bug`, `feature`, `documentation`, `refactor` |
+| **Priority** (optional) | `blocking`, `performance`, `triage` |
+
+**Examples:**
+- `bug` + `frontend` (typical bug report)
+- `feature` + `backend` (API enhancement)
+- `refactor` + `frontend` (technical debt)
+
+### Key Rules
+
+1. **Don't hallucinate context** - If you don't have enough information, leave sections blank or say "TBD"
+2. **Be specific** - Vague symptoms are unhelpful (don't guess at root causes)
+3. **One issue per problem** - Don't bundle unrelated issues
+4. **Check for duplicates** - Always search existing issues before creating new ones
+   - Search the title keywords
+   - Look for similar issues marked `duplicate`
+   - If unsure, mention potential duplicates in the issue
+
+## Duplicate Prevention Checklist
+
+Before creating any issue, **always**:
+
+```bash
+# 1. Search by keywords
+gh issue list --search "keyword" --state all
+
+# 2. Check for similar open issues
+gh issue list --state open | grep -i "relevant term"
+
+# 3. Review related issues for duplicates
+```
+
+If you find a duplicate:
+- Add the `duplicate` label to the newer issue
+- Reference the original issue in a comment
+- Close the newer issue with: "Duplicate of #123"
+
+## Linking Issues to PRs
+
+All PRs **must link to at least one issue** using keywords:
+
+```markdown
+# In PR description:
+closes #42    # Issue closes when PR merges
+fixes #42     # Alternative to 'closes'
+resolves #42  # Alternative to 'closes'
+relates to #39 # PR is related but doesn't close
+```
+
+When a PR is merged with `closes #123`, the linked issue automatically closes.
+
+## For Solving Issues
+
+1. Read the **TL;DR** first for context
+2. Review **Suspected Root Cause** - this is the human's theory, not gospel
+3. Follow **Potential Solutions** as guidance only - diverge if you see a better path
+4. Reference the issue in your PR: `closes #issue-number`
+5. If the issue lacks detail, ask for clarification or update it with your findings
+
+## Documentation
+
+See `.github/README.md` for:
+- Complete label definitions
+- Branch protection rules
+- Workflow examples
+- Label creation instructions

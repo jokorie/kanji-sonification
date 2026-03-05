@@ -1,0 +1,43 @@
+---
+description: Frontend API interface types must mirror backend serialization exactly
+globs: frontend/src/types/*.ts
+alwaysApply: false
+---
+# API Types Mirror Backend Serialization
+
+Frontend interfaces for API responses should reflect what the backend *actually* sends, not what TypeScript defensively allows.
+
+## The Distinction
+
+- `field?: T` — field may be **absent** from the JSON payload entirely
+- `field: T | null` — field is **always present** but its value can be `null`
+
+These are different. Using `?` when the backend always includes the field silently introduces `undefined` as a third state that can never actually occur, and forces unnecessary null-coalescing at every callsite.
+
+## Rule
+
+Before writing `field?: T`, check the backend model. If the field always serializes (even as `null`), use `field: T | null` instead.
+
+```typescript
+// ❌ BAD — backend always sends these, ? introduces phantom undefined
+interface Signal {
+  title?: string
+  source?: string
+  recommended_side?: 'YES' | 'NO'
+  yes_price?: number | null
+}
+
+// ✅ GOOD — matches what the backend actually serializes
+interface Signal {
+  title: string               // always present, may be ""
+  source: string              // always present
+  recommended_side: 'YES' | 'NO' | null  // always present, null when no recommendation
+  yes_price: number | null    // always present, null when price unavailable
+}
+```
+
+## Corollary: Check the Backend Model First
+
+Don't infer interface shapes from existing frontend code or guesswork. Read the Pydantic model (or equivalent) to determine which fields are required, optional, or nullable.
+
+In Python/Pydantic: `field: str` → always present. `field: str | None = None` → always present, nullable. A field with `Optional` is absent from JSON only if explicitly excluded.

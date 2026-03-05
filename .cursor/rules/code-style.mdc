@@ -1,0 +1,112 @@
+---
+description: Code style - boring, simple, obvious
+alwaysApply: true
+---
+
+# Code Style: Boring Code
+
+## Philosophy
+
+**Default to boring.** Write code that is simple, readable, and maintainable. Boring code is code any engineer can understand in 10 seconds. Elegant or clever solutions are a tool, not a goal — reach for them only when the problem genuinely demands it (e.g., performance-critical hot paths, complex state machines). When in doubt, write the obvious thing.
+
+## Principles
+- Clarity over cleverness — a new reader should understand the code without puzzling over it
+- Obvious abstractions over elegant ones — if you have to explain it, simplify it
+- Explicit over implicit — don't hide behavior behind magic
+- Flat over nested — use early returns to keep the happy path at the top level
+- Remove unnecessary comments that restate what the code does — but do comment "why"
+- Only handle errors you can meaningfully recover from
+
+## When Elegance Is Warranted
+
+Reserve clever/concise patterns for cases where:
+- The boring version would be significantly longer with no readability gain (e.g., a dict comprehension replacing 10 lines of loop)
+- Performance matters and the clever version is measurably faster
+- The abstraction captures real domain complexity that would otherwise leak everywhere
+
+If the elegant version requires a comment to explain, it's not earning its keep.
+
+## Specific Rules
+
+### Abstractions
+- Prefer plain functions over classes unless you need shared mutable state
+- Prefer simple data containers (dataclasses, Pydantic models) over inheritance hierarchies
+- Don't introduce an abstraction until you have 2+ concrete uses — avoid speculative generalization
+- Name abstractions after what they *are*, not what pattern they implement
+
+### Comments
+- Only comment "why", never "what"
+- No docstrings for trivial functions (unless public API)
+- Prefer clear variable names over comments
+
+### Code Structure
+- Use early returns to reduce nesting
+- Keep functions short and focused — if it scrolls, split it
+- Prefer list comprehensions over loops for simple transformations, but use loops when the comprehension gets hard to read
+- Keep intermediate variables when they name a concept — remove them when they just add noise
+
+### Error Handling
+- Only handle errors you can meaningfully recover from
+- Let exceptions propagate unless you have a specific reason to catch them
+- Prefer explicit error types over generic Exception
+
+### Type Hints
+- Use type hints for public APIs and complex logic
+- Don't over-annotate simple local variables
+- Trust type inference when types are obvious
+
+### Naming
+- Prefer short, clear names over long descriptive ones
+- Use domain terminology consistently
+- Avoid redundant prefixes/suffixes (e.g., `_handle_` when context is clear)
+
+### Verbosity
+- Don't add logging for every operation — only important state changes
+- Avoid emoji in code/logs unless it adds real value
+
+## Examples
+
+❌ Clever:
+```python
+result = next((x for x in items if x.ready and x.owner == user), None) or default_item
+```
+
+✅ Boring:
+```python
+result = default_item
+for x in items:
+    if x.ready and x.owner == user:
+        result = x
+        break
+```
+
+❌ Over-abstracted:
+```python
+class MessageDispatcherStrategy(ABC):
+    @abstractmethod
+    def dispatch(self, msg: Message, ctx: Context) -> None: ...
+
+class SignalDispatcher(MessageDispatcherStrategy):
+    def dispatch(self, msg, ctx):
+        ctx.broadcast(msg)
+```
+
+✅ Boring:
+```python
+async def broadcast_signal(key: str, message: BaseModel):
+    await manager.broadcast(key, message)
+```
+
+❌ Narrating the obvious:
+```python
+# Check if the connection is still open
+if not self._is_websocket_open(ws):
+    # Connection is closed, so we can't proceed
+    raise RuntimeError("WebSocket closed")
+```
+
+✅ Self-evident:
+```python
+if not self._is_websocket_open(ws):
+    raise RuntimeError("WebSocket closed")
+```

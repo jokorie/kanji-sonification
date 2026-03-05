@@ -1,0 +1,31 @@
+---
+description: Protocol for responding to Greptile PR review comments
+alwaysApply: true
+---
+
+# Greptile Review Protocol
+
+When addressing Greptile inline comments on a PR, after fixing each issue, post a reply to that comment on GitHub using the `gh api` command to indicate the fix has been applied.
+
+## How to reply to a PR review comment
+
+```bash
+gh api repos/{owner}/{repo}/pulls/comments/{comment_id}/replies \
+  --method POST \
+  --field body="Fixed in {commit_sha}: {one-line description of what was done}"
+```
+
+To find comment IDs:
+```bash
+gh api repos/{owner}/{repo}/pulls/{pr_number}/comments | python3 -c "
+import json, sys
+for c in json.load(sys.stdin):
+    print(c['id'], c['path'], c.get('line','?'), c['body'][:80])
+"
+```
+
+## What the reply should say
+
+- Reference the commit SHA where the fix was made
+- One sentence describing what changed
+- Example: `"Fixed in cf56d64: updated regex to capture 1-2 words and added _resolve_team() for two-word city name lookup"`

@@ -1,0 +1,19 @@
+---
+description: Browser testing credentials and login instructions
+alwaysApply: true
+---
+
+# Browser Testing
+
+When using browser mode to navigate the app, use the dev test account instead of Google OAuth.
+
+## Dev Account
+
+- **Email:** `dev@smartsurfacer.local`
+- **Password:** `devtest1234`
+
+## Login Flow
+
+1. Navigate to the app (default: `http://localhost:5173`)
+2. The login page has both a Google button and an email/password form below it
+3. Fill in the email and password fields and click "Sign in with Email"
