@@ -217,8 +217,9 @@ export class CanvasInput {
 
   /**
    * Draw one point of an animating playback stroke.
-   * Coordinates are normalized (0–1), matching the guide's coordinate space.
-   * Draws a glowing line from the previous point and a bright dot at the tip.
+   * Coordinates are normalized (0–1), matching the guide's coordinate space
+   * (padded by 10% on each side). Use drawUserReplayPoint for user-recorded
+   * strokes, which are in full-canvas normalized space.
    */
   drawPlaybackPoint(normX: number, normY: number, pressure = 0.6): void {
     const padding = 0.1;
@@ -243,6 +244,43 @@ export class CanvasInput {
     }
 
     // Glowing tip dot
+    this.ctx.shadowColor = '#c9463d';
+    this.ctx.shadowBlur = 28;
+    this.ctx.fillStyle = '#ffffff';
+    this.ctx.beginPath();
+    this.ctx.arc(x, y, lineWidth / 2 + 1, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    this.ctx.restore();
+
+    this.lastPlaybackPoint = { x, y };
+  }
+
+  /**
+   * Draw one point of a user-recorded stroke replay.
+   * Coordinates are normalized (0–1) over the full canvas — the same space
+   * that live drawing uses. Shares the glowing visual style with drawPlaybackPoint.
+   */
+  drawUserReplayPoint(normX: number, normY: number, pressure = 0.6): void {
+    const x = normX * this.logicalWidth;
+    const y = normY * this.logicalHeight;
+    const lineWidth = pressure * 6 + 2;
+
+    this.ctx.save();
+
+    if (this.lastPlaybackPoint) {
+      this.ctx.shadowColor = 'rgba(201, 70, 61, 0.7)';
+      this.ctx.shadowBlur = 14;
+      this.ctx.strokeStyle = 'rgba(232, 228, 220, 0.95)';
+      this.ctx.lineWidth = lineWidth;
+      this.ctx.lineCap = 'round';
+      this.ctx.lineJoin = 'round';
+      this.ctx.beginPath();
+      this.ctx.moveTo(this.lastPlaybackPoint.x, this.lastPlaybackPoint.y);
+      this.ctx.lineTo(x, y);
+      this.ctx.stroke();
+    }
+
     this.ctx.shadowColor = '#c9463d';
     this.ctx.shadowBlur = 28;
     this.ctx.fillStyle = '#ffffff';

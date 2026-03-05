@@ -355,7 +355,7 @@ class App {
 
           const point = stroke[i];
           this.pressureFill.style.height = `${point.force * 100}%`;
-          this.canvasInput.drawPlaybackPoint(point.x, point.y, point.force);
+          this.canvasInput.drawUserReplayPoint(point.x, point.y, point.force);
 
           const features = playbackExtractor.update(point);
           if (features) {
