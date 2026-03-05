@@ -3,19 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Sonic Kanji</title>
+  <title>Kanji Terminal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;500&family=JetBrains+Mono:wght@300&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg-primary: #0d0d0d;
       --bg-secondary: #1a1a1a;
+      --bg-panel: #141414;
       --accent: #c9463d;
       --accent-glow: rgba(201, 70, 61, 0.4);
       --ink: #e8e4dc;
       --ink-dim: rgba(232, 228, 220, 0.5);
+      --ink-faint: rgba(232, 228, 220, 0.2);
       --grid: rgba(232, 228, 220, 0.06);
+      --border: rgba(232, 228, 220, 0.08);
       --success: #4a9c6d;
       --warning: #d4a84b;
     }
@@ -38,61 +41,61 @@
     body {
       display: flex;
       flex-direction: column;
-      background: 
-        radial-gradient(ellipse at 50% 0%, rgba(201, 70, 61, 0.08) 0%, transparent 50%),
+      background:
+        radial-gradient(ellipse at 50% 0%, rgba(201, 70, 61, 0.06) 0%, transparent 50%),
         linear-gradient(180deg, var(--bg-primary) 0%, #0a0a0a 100%);
     }
 
-    /* Header */
+    /* ── Header ── */
     header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 16px 24px;
-      border-bottom: 1px solid rgba(232, 228, 220, 0.08);
-      backdrop-filter: blur(8px);
+      padding: 12px 24px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
       z-index: 10;
     }
 
     .logo {
-      font-size: 1.5rem;
+      font-size: 1.1rem;
       font-weight: 300;
       color: var(--ink);
-      letter-spacing: 0.1em;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
     }
 
     .logo span {
       color: var(--accent);
     }
 
-    /* Status indicator */
     .status {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       color: var(--ink-dim);
       letter-spacing: 0.05em;
     }
 
     .status-dot {
-      width: 8px;
-      height: 8px;
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
       background: var(--warning);
-      box-shadow: 0 0 8px var(--warning);
+      box-shadow: 0 0 6px var(--warning);
       transition: all 0.3s ease;
     }
 
     .status-dot.connected {
       background: var(--success);
-      box-shadow: 0 0 12px var(--success);
+      box-shadow: 0 0 10px var(--success);
     }
 
     .status-dot.active {
       background: var(--accent);
-      box-shadow: 0 0 16px var(--accent-glow);
+      box-shadow: 0 0 14px var(--accent-glow);
       animation: pulse 0.8s ease-in-out infinite;
     }
 
@@ -101,30 +104,147 @@
       50% { transform: scale(1.3); opacity: 0.7; }
     }
 
-    /* Canvas container */
-    .canvas-container {
+    /* ── Main layout ── */
+    .main {
       flex: 1;
-      position: relative;
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      justify-content: center;
+      padding: 20px 24px;
+      overflow: hidden;
+      gap: 16px;
+    }
+
+    .main-center {
+      flex: 1;
+      max-width: 500px;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .main-right {
+      width: 210px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Top info bar ── */
+    .info-top {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 16px 20px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    .kanji-display {
+      font-size: 4rem;
+      font-weight: 400;
+      color: var(--ink);
+      line-height: 1;
+      min-width: 64px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .kanji-display.empty {
+      color: var(--ink-faint);
+      font-size: 2rem;
+    }
+
+    .info-divider {
+      width: 1px;
+      height: 56px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+
+    .readings-block {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .reading-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .reading-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      flex-shrink: 0;
+      width: 28px;
+    }
+
+    .reading-values {
+      font-size: 0.95rem;
+      color: var(--ink);
+      letter-spacing: 0.05em;
+    }
+
+    .reading-values.onyomi {
+      font-weight: 400;
+    }
+
+    .reading-values.kunyomi {
+      font-weight: 300;
+      color: var(--ink-dim);
+    }
+
+    .meaning-text {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--ink-dim);
+      letter-spacing: 0.04em;
+      margin-top: 4px;
+    }
+
+    .info-top.empty .kanji-display,
+    .info-top.empty .readings-block {
+      opacity: 0.3;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* ── Canvas area ── */
+    .canvas-area {
+      flex: 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 24px;
+      min-height: 0;
     }
 
     .canvas-wrapper {
       position: relative;
-      width: 100%;
-      max-width: 800px;
+      /* Square: fits center column width and available height */
+      width: min(calc(100vw - 48px - 226px), calc(100vh - 360px), 420px);
       aspect-ratio: 1;
-      max-height: calc(100vh - 180px);
     }
 
-    /* Grid overlay */
     .grid-overlay {
       position: absolute;
       inset: 0;
       pointer-events: none;
-      opacity: 0.5;
     }
 
     .grid-overlay::before,
@@ -159,27 +279,186 @@
       cursor: crosshair;
     }
 
-    /* Footer controls */
+    /* Pressure indicator */
+    .pressure-bar {
+      position: absolute;
+      right: -16px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 80px;
+      background: rgba(232, 228, 220, 0.08);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .pressure-fill {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(to top, var(--accent), var(--warning));
+      border-radius: 2px;
+      transition: height 0.05s ease-out;
+    }
+
+    /* ── Reading bar (bottom of center column) ── */
+    .reading-bar {
+      width: 100%;
+      padding: 12px 20px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    .reading-bar-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
+    .reading-bar-value {
+      font-size: 1.1rem;
+      font-weight: 300;
+      color: var(--ink);
+      letter-spacing: 0.08em;
+    }
+
+    .reading-bar-value.empty {
+      color: var(--ink-faint);
+      font-size: 0.8rem;
+      font-style: italic;
+    }
+
+    /* ── Kanji picker (right panel) ── */
+    .kanji-picker {
+      flex: 1;
+      display: flex;
+      flex-direction: row;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .picker-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      min-width: 0;
+    }
+
+    .picker-col:last-child {
+      border-right: none;
+    }
+
+    .picker-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.45rem;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+      text-align: center;
+      padding: 5px 1px 4px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--bg-panel);
+    }
+
+    .picker-scroll {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
+    }
+
+    .picker-scroll::-webkit-scrollbar {
+      display: none;
+    }
+
+    .picker-kanji {
+      flex-shrink: 0;
+      aspect-ratio: 1;
+      font-family: 'Noto Serif JP', serif;
+      font-size: 1.1rem;
+      font-weight: 400;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--ink);
+      transition: background 0.1s, color 0.1s;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .picker-kanji:active {
+      background: rgba(232, 228, 220, 0.08);
+    }
+
+    .picker-kanji.selected {
+      background: var(--accent);
+      color: var(--bg-primary);
+    }
+
+    /* ── Footer controls ── */
     footer {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 16px 24px;
-      border-top: 1px solid rgba(232, 228, 220, 0.08);
+      padding: 12px 24px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
     }
 
     .stats {
       display: flex;
-      gap: 24px;
+      align-items: center;
+      gap: 20px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.7rem;
+      font-size: 0.65rem;
       color: var(--ink-dim);
       letter-spacing: 0.02em;
     }
 
+    .speed-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 72px;
+      height: 3px;
+      background: rgba(232, 228, 220, 0.15);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+    }
+
     .stat-label {
       opacity: 0.6;
-      margin-right: 6px;
+      margin-right: 4px;
     }
 
     .stat-value {
@@ -188,10 +467,10 @@
 
     button {
       font-family: 'Noto Serif JP', serif;
-      font-size: 0.875rem;
+      font-size: 0.8rem;
       font-weight: 500;
-      letter-spacing: 0.1em;
-      padding: 10px 24px;
+      letter-spacing: 0.08em;
+      padding: 8px 18px;
       background: transparent;
       border: 1px solid var(--accent);
       color: var(--accent);
@@ -210,44 +489,14 @@
     }
 
     button:disabled {
-      opacity: 0.5;
+      opacity: 0.4;
       cursor: not-allowed;
     }
 
-    /* Template selector */
     .template-controls {
       display: flex;
       align-items: center;
-      gap: 12px;
-    }
-
-    .kanji-select {
-      font-family: 'Noto Serif JP', serif;
-      font-size: 1.5rem;
-      padding: 6px 12px;
-      background: var(--bg-secondary);
-      border: 1px solid rgba(232, 228, 220, 0.15);
-      border-radius: 2px;
-      color: var(--ink);
-      cursor: pointer;
-      min-width: 60px;
-      text-align: center;
-    }
-
-    .kanji-select:focus {
-      outline: none;
-      border-color: var(--accent);
-    }
-
-    .kanji-select option {
-      font-size: 1.2rem;
-      padding: 8px;
-    }
-
-    .play-btn {
-      display: flex;
-      align-items: center;
-      gap: 6px;
+      gap: 10px;
     }
 
     .play-btn.playing {
@@ -255,34 +504,17 @@
       color: var(--bg-primary);
     }
 
-    /* Pressure indicator */
-    .pressure-bar {
-      position: absolute;
-      right: 16px;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 4px;
-      height: 120px;
+    button.toggled {
       background: rgba(232, 228, 220, 0.1);
-      border-radius: 2px;
-      overflow: hidden;
+      border-color: var(--ink-faint);
+      color: var(--ink);
     }
 
-    .pressure-fill {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: linear-gradient(to top, var(--accent), var(--warning));
-      border-radius: 2px;
-      transition: height 0.05s ease-out;
-    }
-
-    /* Init modal */
+    /* ── Init modal ── */
     .modal {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.9);
+      background: rgba(0, 0, 0, 0.92);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -301,92 +533,155 @@
       background: var(--bg-secondary);
       border: 1px solid rgba(232, 228, 220, 0.1);
       padding: 48px;
-      max-width: 400px;
+      max-width: 380px;
       width: 90%;
       border-radius: 4px;
       text-align: center;
     }
 
     .modal h2 {
-      font-size: 1.5rem;
+      font-size: 1.4rem;
       font-weight: 300;
       color: var(--ink);
-      margin-bottom: 16px;
+      margin-bottom: 12px;
       letter-spacing: 0.1em;
     }
 
     .modal p {
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       color: var(--ink-dim);
       margin-bottom: 32px;
-      line-height: 1.6;
+      line-height: 1.7;
     }
 
     .modal button {
       width: 100%;
-      padding: 16px 32px;
-      font-size: 1rem;
+      padding: 14px 32px;
+      font-size: 0.9rem;
     }
 
-    /* Responsive */
+    /* ── Responsive ── */
     @media (max-width: 600px) {
       header, footer {
-        padding: 12px 16px;
+        padding: 10px 16px;
       }
 
-      .logo {
-        font-size: 1.25rem;
+      .main {
+        padding: 12px 16px;
+        gap: 8px;
+      }
+
+      .main-right {
+        width: 160px;
+      }
+
+      .info-top {
+        padding: 12px 14px;
+      }
+
+      .kanji-display {
+        font-size: 3rem;
+        min-width: 52px;
+      }
+
+      .canvas-wrapper {
+        width: min(calc(100vw - 32px - 176px), calc(100vh - 320px), 360px);
       }
 
       .stats {
         gap: 12px;
-        font-size: 0.65rem;
+        font-size: 0.6rem;
+      }
+    }
+
+    @media (orientation: landscape) and (max-height: 600px) {
+      .info-top {
+        padding: 10px 16px;
       }
 
-      .canvas-container {
-        padding: 16px;
+      .kanji-display {
+        font-size: 2.8rem;
+      }
+
+      .reading-bar {
+        padding: 8px 16px;
       }
     }
   </style>
 </head>
 <body>
   <header>
-    <div class="logo">SONIC <span>漢字</span></div>
+    <div class="logo">KANJI <span>端末</span></div>
     <div class="status">
       <div class="status-dot" id="statusDot"></div>
       <span id="statusText">TAP TO START</span>
     </div>
   </header>
 
-  <div class="canvas-container">
-    <div class="canvas-wrapper">
-      <div class="grid-overlay"></div>
-      <canvas id="canvas"></canvas>
+  <div class="main">
+    <!-- Center column: info + canvas + reading bar -->
+    <div class="main-center">
+      <!-- Top info bar: kanji character + reading -->
+      <div class="info-top empty" id="infoTop">
+        <div class="kanji-display empty" id="kanjiDisplay">漢</div>
+        <div class="info-divider"></div>
+        <div class="readings-block">
+          <div class="reading-row">
+            <span class="reading-label">音</span>
+            <span class="reading-values onyomi" id="onyomiText">—</span>
+          </div>
+          <div class="reading-row">
+            <span class="reading-label">訓</span>
+            <span class="reading-values kunyomi" id="kunyomiText">—</span>
+          </div>
+          <div class="meaning-text" id="meaningText">select a kanji to begin</div>
+        </div>
+      </div>
+
+      <!-- Canvas -->
+      <div class="canvas-area">
+        <div class="canvas-wrapper">
+          <div class="grid-overlay"></div>
+          <canvas id="canvas"></canvas>
+          <div class="pressure-bar">
+            <div class="pressure-fill" id="pressureFill"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom reading bar -->
+      <div class="reading-bar" id="readingBar">
+        <span class="reading-bar-label">読み</span>
+        <span class="reading-bar-value empty" id="readingBarValue">select a kanji</span>
+      </div>
     </div>
-    <div class="pressure-bar">
-      <div class="pressure-fill" id="pressureFill"></div>
+
+    <!-- Right column: kanji picker, one column per lesson -->
+    <div class="main-right">
+      <div class="kanji-picker" id="kanjiPicker"></div>
     </div>
   </div>
 
   <footer>
     <div class="stats">
       <div>
-        <span class="stat-label">POINTS</span>
+        <span class="stat-label">PTS</span>
         <span class="stat-value" id="pointCount">0</span>
-      </div>
-      <div>
-        <span class="stat-label">PRESSURE</span>
-        <span class="stat-value" id="pressureValue">0.00</span>
       </div>
       <div>
         <span class="stat-label">FREQ</span>
         <span class="stat-value" id="frequencyValue">--</span>
       </div>
+      <div class="speed-control">
+        <span class="stat-label">SPEED</span>
+        <input type="range" id="speedSlider" min="0.25" max="4" step="0.25" value="2">
+        <span class="stat-value" id="speedValue">2.0x</span>
+      </div>
     </div>
     <div class="template-controls">
-      <select id="kanjiSelect" class="kanji-select"></select>
       <button id="playBtn" class="play-btn">▶ PLAY</button>
       <button id="replayBtn" class="play-btn">↺ REPLAY</button>
+      <button id="radicalsBtn">RADICALS</button>
       <button id="clearBtn">CLEAR</button>
     </div>
   </footer>
@@ -394,7 +689,7 @@
   <!-- Audio initialization modal (required due to browser autoplay policy) -->
   <div class="modal visible" id="initModal">
     <div class="modal-content">
-      <h2>Sonic 漢字</h2>
+      <h2>漢字 端末</h2>
       <p>Draw kanji with Apple Pencil and hear them come to life. Sound is generated locally on your device.</p>
       <button id="initAudioBtn">ENABLE AUDIO</button>
     </div>
@@ -403,4 +698,3 @@
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
-

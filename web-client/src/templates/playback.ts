@@ -10,6 +10,51 @@ import { KanjiSynth } from '../audio/synth';
 import { StreamingFeatureExtractor } from '../features/kinematics';
 import { mapFeaturesToSynthParams, yToPitch, forceToAmplitude } from '../audio/mapping';
 
+/**
+ * Uniform normalization frame for a radical.
+ *
+ * Both axes are scaled by the same factor (the larger extent), so the
+ * directional character of strokes is preserved — a mostly-vertical stroke
+ * still sounds mostly-vertical after remapping.
+ */
+interface RadicalFrame {
+  centerX: number;  // center of the bounding box
+  centerY: number;
+  extent: number;   // half-size of the larger dimension (uniform scale)
+}
+
+/**
+ * Build a map from stroke index to the uniform normalization frame of its radical.
+ * Strokes not assigned to any radical are absent from the map (fall back to global coords).
+ */
+function computeRadicalBoundsMap(template: KanjiTemplate): Map<number, RadicalFrame> {
+  const map = new Map<number, RadicalFrame>();
+
+  for (const radical of template.radicals) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
+    for (const idx of radical.strokeIndices) {
+      for (const [x, y] of template.strokes[idx]) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const extent = Math.max(maxX - minX, maxY - minY) / 2;
+
+    const frame: RadicalFrame = { centerX, centerY, extent };
+    for (const idx of radical.strokeIndices) {
+      map.set(idx, frame);
+    }
+  }
+
+  return map;
+}
+
 export interface PlaybackOptions {
   /** Duration per stroke in milliseconds */
   strokeDuration: number;
@@ -69,14 +114,17 @@ export class TemplatePlayer {
     this.isPlaying = true;
     this.abortController = new AbortController();
 
-    console.log(`🎬 Playing template: ${template.character} (${template.meaning})`);
+    console.log(`🎬 Playing template: ${template.character} (${template.reading})`);
+
+    const radicalBounds = computeRadicalBoundsMap(template);
 
     try {
       for (let strokeIndex = 0; strokeIndex < template.strokes.length; strokeIndex++) {
         if (!this.isPlaying) break;
 
         const stroke = template.strokes[strokeIndex];
-        await this.playStroke(stroke, strokeIndex, opts);
+        const frame = radicalBounds.get(strokeIndex) ?? null;
+        await this.playStroke(stroke, strokeIndex, opts, frame);
 
         // Pause between strokes (except after last)
         if (strokeIndex < template.strokes.length - 1) {
@@ -101,7 +149,8 @@ export class TemplatePlayer {
   private async playStroke(
     points: number[][],
     strokeIndex: number,
-    opts: PlaybackOptions
+    opts: PlaybackOptions,
+    frame: RadicalFrame | null = null
   ): Promise<void> {
     if (points.length === 0) return;
 
@@ -112,7 +161,7 @@ export class TemplatePlayer {
     const timePerPoint = opts.strokeDuration / points.length;
 
     // Start synth with first point
-    const firstPoint = this.createStrokePoint(points[0], 0, opts.pressure);
+    const firstPoint = this.createStrokePoint(points[0], 0, opts.pressure, frame);
     const initialParams = {
       frequency: yToPitch(firstPoint.y, DEFAULT_SYNTH_CONFIG.minFreq, DEFAULT_SYNTH_CONFIG.maxFreq, true),
       amplitude: forceToAmplitude(firstPoint.force, DEFAULT_SYNTH_CONFIG.minAmp, DEFAULT_SYNTH_CONFIG.maxAmp),
@@ -127,13 +176,16 @@ export class TemplatePlayer {
       if (!this.isPlaying) break;
 
       const t = (i / (points.length - 1)) * (opts.strokeDuration / 1000);
-      const point = this.createStrokePoint(points[i], t, opts.pressure);
 
-      // Notify visualization
-      opts.onPoint?.(point, strokeIndex);
+      // Original coords for visualization; remapped coords for sonification
+      const displayPoint = this.createStrokePoint(points[i], t, opts.pressure, null);
+      const synthPoint = this.createStrokePoint(points[i], t, opts.pressure, frame);
 
-      // Extract features and update synth
-      const features = this.featureExtractor.update(point);
+      // Notify visualization with original coordinates
+      opts.onPoint?.(displayPoint, strokeIndex);
+
+      // Extract features and update synth with radical-frame coordinates
+      const features = this.featureExtractor.update(synthPoint);
       if (features) {
         const synthParams = mapFeaturesToSynthParams(features);
         this.synth.update(synthParams);
@@ -150,15 +202,22 @@ export class TemplatePlayer {
   /**
    * Create a StrokePoint from raw coordinates
    */
-  private createStrokePoint(coords: number[], t: number, pressure: number): StrokePoint {
-    return {
-      x: coords[0],
-      y: coords[1],
-      force: pressure,
-      azimuth: 0,
-      altitude: Math.PI / 2,
-      t,
-    };
+  private createStrokePoint(
+    coords: number[],
+    t: number,
+    pressure: number,
+    frame: RadicalFrame | null = null
+  ): StrokePoint {
+    let x = coords[0];
+    let y = coords[1];
+
+    if (frame && frame.extent > 0) {
+      // Uniform scale: same factor for both axes, preserves directional character
+      x = ((coords[0] - frame.centerX) / (2 * frame.extent)) + 0.5;
+      y = ((coords[1] - frame.centerY) / (2 * frame.extent)) + 0.5;
+    }
+
+    return { x, y, force: pressure, azimuth: 0, altitude: Math.PI / 2, t };
   }
 
   /**

@@ -10,7 +10,28 @@ import { mapFeaturesToSynthParams, yToPitch, forceToAmplitude } from './audio/ma
 import { KanjiSynth } from './audio/synth';
 import { CanvasInput } from './canvas/input';
 import { TemplatePlayer } from './templates/playback';
-import { getTemplate, getAvailableCharacters } from './templates/kanji-data';
+import { KanjiTemplate, getTemplate, LESSON_GROUPS } from './templates/kanji-data';
+
+// Palette for radical coloring — cycles if a kanji has more radicals than entries.
+const RADICAL_PALETTE = [
+  'rgba(201, 70, 61, 0.55)',   // red
+  'rgba(74, 156, 109, 0.55)',  // green
+  'rgba(212, 168, 75, 0.55)',  // gold
+  'rgba(80, 150, 210, 0.55)',  // blue
+  'rgba(170, 100, 200, 0.55)', // purple
+  'rgba(200, 130, 70, 0.55)',  // orange
+];
+
+function buildStrokeColors(template: KanjiTemplate): string[] {
+  const colors = new Array<string>(template.strokeCount).fill('rgba(201, 70, 61, 0.25)');
+  template.radicals.forEach((group, i) => {
+    const color = RADICAL_PALETTE[i % RADICAL_PALETTE.length];
+    for (const idx of group.strokeIndices) {
+      if (idx < colors.length) colors[idx] = color;
+    }
+  });
+  return colors;
+}
 
 // ============================================================
 // APP
@@ -28,17 +49,29 @@ class App {
   private currentRecordedStroke: StrokePoint[] | null = null;
   private isRecordingPlayback = false;
   private recordingAbortController: AbortController | null = null;
+  private radicalsEnabled = false;
+  private playbackSpeed = 2; // multiplier; 1 = 500ms/stroke, 2 = 250ms/stroke (default snappy)
+
+  private selectedKanji = '';
 
   // DOM elements
   private statusDot: HTMLElement;
   private statusText: HTMLElement;
   private pointCountEl: HTMLElement;
-  private pressureValueEl: HTMLElement;
   private pressureFill: HTMLElement;
   private frequencyValueEl: HTMLElement;
-  private kanjiSelect: HTMLSelectElement;
   private playBtn: HTMLButtonElement;
   private replayBtn: HTMLButtonElement;
+  private radicalsBtn: HTMLButtonElement;
+  private speedSlider: HTMLInputElement;
+  private speedValueEl: HTMLElement;
+  // Info panel elements
+  private infoTop: HTMLElement;
+  private kanjiDisplay: HTMLElement;
+  private onyomiText: HTMLElement;
+  private kunyomiText: HTMLElement;
+  private meaningText: HTMLElement;
+  private readingBarValue: HTMLElement;
 
   constructor() {
     this.synth = new KanjiSynth(DEFAULT_SYNTH_CONFIG);
@@ -49,12 +82,20 @@ class App {
     this.statusDot = document.getElementById('statusDot')!;
     this.statusText = document.getElementById('statusText')!;
     this.pointCountEl = document.getElementById('pointCount')!;
-    this.pressureValueEl = document.getElementById('pressureValue')!;
     this.pressureFill = document.getElementById('pressureFill')!;
     this.frequencyValueEl = document.getElementById('frequencyValue')!;
-    this.kanjiSelect = document.getElementById('kanjiSelect') as HTMLSelectElement;
     this.playBtn = document.getElementById('playBtn') as HTMLButtonElement;
     this.replayBtn = document.getElementById('replayBtn') as HTMLButtonElement;
+    this.radicalsBtn = document.getElementById('radicalsBtn') as HTMLButtonElement;
+    this.speedSlider = document.getElementById('speedSlider') as HTMLInputElement;
+    this.speedValueEl = document.getElementById('speedValue')!;
+    // Info panels
+    this.infoTop = document.getElementById('infoTop')!;
+    this.kanjiDisplay = document.getElementById('kanjiDisplay')!;
+    this.onyomiText = document.getElementById('onyomiText')!;
+    this.kunyomiText = document.getElementById('kunyomiText')!;
+    this.meaningText = document.getElementById('meaningText')!;
+    this.readingBarValue = document.getElementById('readingBarValue')!;
 
     const canvas = document.getElementById('canvas') as HTMLCanvasElement;
     this.canvasInput = new CanvasInput(canvas, {
@@ -65,11 +106,8 @@ class App {
       drawOnCanvas: true,
     });
 
-    this.populateKanjiSelect();
+    this.buildKanjiPicker();
     this.bindUI();
-
-    // Force blank (no-template) mode on load
-    this.kanjiSelect.value = '';
     this.updateKanjiGuide();
   }
 
@@ -77,17 +115,42 @@ class App {
   // SETUP
   // ============================================================
 
-  private populateKanjiSelect(): void {
-    const blank = document.createElement('option');
-    blank.value = '';
-    this.kanjiSelect.appendChild(blank);
+  private buildKanjiPicker(): void {
+    const picker = document.getElementById('kanjiPicker')!;
 
-    for (const char of getAvailableCharacters()) {
-      const opt = document.createElement('option');
-      opt.value = char;
-      opt.textContent = char;
-      this.kanjiSelect.appendChild(opt);
+    for (const { label, characters } of LESSON_GROUPS) {
+      const col = document.createElement('div');
+      col.className = 'picker-col';
+
+      const lbl = document.createElement('div');
+      lbl.className = 'picker-label';
+      lbl.textContent = label.replace('Lessons ', 'L').replace('Lesson ', 'L');
+      col.appendChild(lbl);
+
+      const scroll = document.createElement('div');
+      scroll.className = 'picker-scroll';
+
+      for (const char of characters) {
+        const cell = document.createElement('div');
+        cell.className = 'picker-kanji';
+        cell.textContent = char;
+        cell.addEventListener('click', () => this.selectKanji(char, cell));
+        scroll.appendChild(cell);
+      }
+
+      col.appendChild(scroll);
+      picker.appendChild(col);
     }
+  }
+
+  private selectKanji(char: string, cell: HTMLElement): void {
+    document.querySelector('.picker-kanji.selected')?.classList.remove('selected');
+    this.selectedKanji = char;
+    cell.classList.add('selected');
+    this.recordedStrokes = [];
+    this.currentRecordedStroke = null;
+    if (this.isRecordingPlayback) this.stopRecordingPlayback();
+    this.updateKanjiGuide();
   }
 
   // ============================================================
@@ -97,11 +160,15 @@ class App {
   private bindUI(): void {
     document.getElementById('clearBtn')!.addEventListener('click', () => this.handleClear());
 
-    this.kanjiSelect.addEventListener('change', () => {
-      this.recordedStrokes = [];
-      this.currentRecordedStroke = null;
-      if (this.isRecordingPlayback) this.stopRecordingPlayback();
+    this.radicalsBtn.addEventListener('click', () => {
+      this.radicalsEnabled = !this.radicalsEnabled;
+      this.radicalsBtn.classList.toggle('toggled', this.radicalsEnabled);
       this.updateKanjiGuide();
+    });
+
+    this.speedSlider.addEventListener('input', () => {
+      this.playbackSpeed = parseFloat(this.speedSlider.value);
+      this.speedValueEl.textContent = `${this.playbackSpeed.toFixed(1)}x`;
     });
 
     this.playBtn.addEventListener('click', () => this.handlePlayBtn());
@@ -136,7 +203,7 @@ class App {
   }
 
   private async handlePlayBtn(): Promise<void> {
-    const character = this.kanjiSelect.value;
+    const character = this.selectedKanji;
     if (!character) {
       console.warn('No kanji selected for template playback.');
       return;
@@ -156,8 +223,8 @@ class App {
       this.updateKanjiGuide();
 
       await this.templatePlayer.play(character, {
-        strokeDuration: 600,
-        strokePause: 300,
+        strokeDuration: 500 / this.playbackSpeed,
+        strokePause: 150 / this.playbackSpeed,
         pressure: 0.6,
         onStrokeStart: i => {
           this.statusDot.classList.add('active');
@@ -219,7 +286,6 @@ class App {
     this.pointCount++;
     this.pointCountEl.textContent = this.pointCount.toString();
 
-    this.pressureValueEl.textContent = point.force.toFixed(2);
     this.pressureFill.style.height = `${point.force * 100}%`;
 
     const features = this.featureExtractor.update(point);
@@ -284,7 +350,6 @@ class App {
           }
 
           const point = stroke[i];
-          this.pressureValueEl.textContent = point.force.toFixed(2);
           this.pressureFill.style.height = `${point.force * 100}%`;
 
           const features = playbackExtractor.update(point);
@@ -295,7 +360,7 @@ class App {
           }
 
           if (i < stroke.length - 1) {
-            const dtMs = Math.max(0, (stroke[i + 1].t - point.t) * 1000);
+            const dtMs = Math.max(0, (stroke[i + 1].t - point.t) * 1000) / this.playbackSpeed;
             await this.sleepWithAbort(dtMs, this.recordingAbortController.signal);
           }
         }
@@ -329,14 +394,41 @@ class App {
   // ============================================================
 
   private updateKanjiGuide(): void {
-    const character = this.kanjiSelect.value;
+    const character = this.selectedKanji;
     const template = getTemplate(character);
 
     if (template) {
-      this.canvasInput.clearAndDrawGuide(template.strokes);
+      const colors = this.radicalsEnabled ? buildStrokeColors(template) : undefined;
+      this.canvasInput.clearAndDrawGuide(template.strokes, colors);
+      this.updateInfoPanels(template);
     } else {
       this.canvasInput.clear();
+      this.clearInfoPanels();
     }
+  }
+
+  private updateInfoPanels(template: KanjiTemplate): void {
+    this.infoTop.classList.remove('empty');
+    this.kanjiDisplay.classList.remove('empty');
+    this.kanjiDisplay.textContent = template.character;
+    this.onyomiText.textContent = '—';
+    this.kunyomiText.textContent = template.reading || '—';
+    this.meaningText.textContent = '';
+
+    this.readingBarValue.classList.remove('empty');
+    this.readingBarValue.textContent = template.reading || '—';
+  }
+
+  private clearInfoPanels(): void {
+    this.infoTop.classList.add('empty');
+    this.kanjiDisplay.classList.add('empty');
+    this.kanjiDisplay.textContent = '漢';
+    this.onyomiText.textContent = '—';
+    this.kunyomiText.textContent = '—';
+    this.meaningText.textContent = 'select a kanji to begin';
+
+    this.readingBarValue.classList.add('empty');
+    this.readingBarValue.textContent = 'select a kanji';
   }
 
   private sleepWithAbort(ms: number, signal: AbortSignal): Promise<void> {

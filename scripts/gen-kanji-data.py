@@ -2,7 +2,8 @@
 """
 Generate kanji-data.ts from KanjiVG SVG files.
 
-Fetches authoritative SVG stroke data from the KanjiVG GitHub repository,
+Reads all kanji from ../kanji/*.csv (relative to the project root),
+fetches authoritative SVG stroke data from the KanjiVG GitHub repository,
 parses each stroke path in order (s1, s2, ...), resamples to evenly-spaced
 points, and writes web-client/src/templates/kanji-data.ts.
 
@@ -10,7 +11,9 @@ Usage:
     python3 scripts/gen-kanji-data.py
 """
 
+import csv
 import math
+import os
 import re
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -18,22 +21,83 @@ from typing import List, Tuple
 
 KANJIVG_BASE = "https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/{}.svg"
 VIEWBOX_SIZE = 109.0
-NUM_SAMPLES = 8  # points per stroke after resampling
+NUM_SAMPLES = 20  # points per stroke after resampling
+SVG_NS = "http://www.w3.org/2000/svg"
+KVG_NS = "http://kanjivg.tagaini.net"
 
-KANJI_LIST = [
-    ("一", "one"),
-    ("二", "two"),
-    ("三", "three"),
-    ("人", "person"),
-    ("大", "big"),
-    ("日", "sun/day"),
-    ("月", "moon"),
-    ("山", "mountain"),
-    ("川", "river"),
-    ("木", "tree"),
-    ("火", "fire"),
-    ("食", "eat"),
-]
+KANJI_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "kanji")
+
+
+def is_kanji(ch: str) -> bool:
+    cp = ord(ch)
+    return (
+        0x4E00 <= cp <= 0x9FFF
+        or 0x3400 <= cp <= 0x4DBF
+        or 0x20000 <= cp <= 0x2A6DF
+    )
+
+
+def csv_label(fname: str) -> str:
+    """Convert a CSV filename like 'kanji_3-6.csv' to a display label like 'Lessons 3–6'."""
+    m = re.search(r"kanji_(.+)\.csv", fname)
+    if not m:
+        return fname
+    raw = m.group(1)
+    # single number → "Lesson N", range → "Lessons N–M"
+    if "-" in raw:
+        parts = raw.split("-", 1)
+        return f"Lessons {parts[0]}–{parts[1]}"
+    return f"Lesson {raw}"
+
+
+def load_kanji_from_csvs() -> tuple[List[Tuple[str, str]], List[Tuple[str, List[str]]]]:
+    """
+    Read all kanji/*.csv files and return:
+      - A deduplicated list of (kanji_char, reading) pairs in first-seen order.
+      - A list of (lesson_label, [kanji_chars]) lesson groups in file order.
+
+    Reading is taken from the first single-kanji entry for that character,
+    falling back to the first compound entry that contains it.
+    """
+    single_readings: dict[str, str] = {}
+    fallback_readings: dict[str, str] = {}
+    order: list[str] = []
+    lesson_groups: list[tuple[str, list[str]]] = []
+
+    csv_dir = os.path.realpath(KANJI_DIR)
+    for fname in sorted(os.listdir(csv_dir)):
+        if not fname.endswith(".csv"):
+            continue
+        label = csv_label(fname)
+        group_chars: list[str] = []
+
+        with open(os.path.join(csv_dir, fname), encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                entry = row.get("Kanji", "").strip().lstrip("★")
+                reading = row.get("Hiragana", "").strip()
+                kanji_chars = [ch for ch in entry if is_kanji(ch)]
+                is_single = len(kanji_chars) == 1
+
+                for ch in kanji_chars:
+                    if ch not in fallback_readings:
+                        fallback_readings[ch] = reading
+                        order.append(ch)
+                        group_chars.append(ch)
+                    if is_single and ch not in single_readings:
+                        single_readings[ch] = reading
+
+        lesson_groups.append((label, group_chars))
+
+    all_kanji = []
+    seen: set[str] = set()
+    for ch in order:
+        if ch not in seen:
+            seen.add(ch)
+            reading = single_readings.get(ch) or fallback_readings.get(ch, "")
+            all_kanji.append((ch, reading))
+
+    return all_kanji, lesson_groups
 
 
 def kanji_to_codepoint(char: str) -> str:
@@ -191,12 +255,62 @@ def resample_by_arc_length(
     return resampled
 
 
-def get_strokes_from_svg(svg_text: str) -> List[List[List[float]]]:
-    """Extract and normalize stroke paths from KanjiVG SVG, in stroke order."""
+def get_stroke_numbers_in_group(elem: ET.Element) -> List[int]:
+    """Recursively collect all 1-based stroke numbers from paths within a group."""
+    numbers = []
+    for child in elem.iter(f"{{{SVG_NS}}}path"):
+        m = re.search(r"-s(\d+)$", child.get("id", ""))
+        if m:
+            numbers.append(int(m.group(1)))
+    return sorted(numbers)
+
+
+def get_radical_groups(root: ET.Element, char: str) -> List[dict]:
+    """
+    Extract one-level-deep radical groups from a KanjiVG SVG root.
+
+    Finds the root <g> for `char`, then returns its direct child <g> elements
+    that have a kvg:element attribute, along with the 0-based stroke indices
+    owned by each group.
+    """
+    codepoint = kanji_to_codepoint(char)
+    root_group = None
+    for elem in root.iter(f"{{{SVG_NS}}}g"):
+        if elem.get("id", "") == f"kvg:{codepoint}":
+            root_group = elem
+            break
+
+    if root_group is None:
+        return []
+
+    groups = []
+    for child in root_group:
+        if child.tag != f"{{{SVG_NS}}}g":
+            continue
+        element = child.get(f"{{{KVG_NS}}}element", "")
+        position = child.get(f"{{{KVG_NS}}}position") or None
+
+        if not element:
+            continue
+
+        stroke_numbers = get_stroke_numbers_in_group(child)
+        if stroke_numbers:
+            groups.append({
+                "element": element,
+                "position": position,
+                # Convert to 0-based indices
+                "strokeIndices": [n - 1 for n in stroke_numbers],
+            })
+
+    return groups
+
+
+def get_strokes_from_svg(svg_text: str) -> tuple:
+    """Extract normalized stroke paths and radical groups from a KanjiVG SVG."""
     root = ET.fromstring(svg_text)
 
     stroke_paths = []
-    for elem in root.iter("{http://www.w3.org/2000/svg}path"):
+    for elem in root.iter(f"{{{SVG_NS}}}path"):
         elem_id = elem.get("id", "")
         m = re.search(r"-s(\d+)$", elem_id)
         if m:
@@ -216,10 +330,14 @@ def get_strokes_from_svg(svg_text: str) -> List[List[List[float]]]:
         ]
         strokes.append(normalized)
 
-    return strokes
+    return strokes, root
 
 
-def generate_ts(kanji_data: List[Tuple[str, str, List[List[List[float]]]]]) -> str:
+def escape_ts_string(s: str) -> str:
+    return s.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def generate_ts(kanji_data: list, lesson_groups: List[Tuple[str, List[str]]]) -> str:
     lines = [
         "/**",
         " * Pre-processed kanji stroke templates.",
@@ -230,32 +348,57 @@ def generate_ts(kanji_data: List[Tuple[str, str, List[List[List[float]]]]]) -> s
         " * DO NOT edit manually — regenerate with: python3 scripts/gen-kanji-data.py",
         " */",
         "",
+        "export interface RadicalGroup {",
+        "  element: string;       // radical character, e.g. '言'",
+        "  position?: string;     // 'left' | 'right' | 'top' | 'bottom' | undefined",
+        "  strokeIndices: number[]; // 0-based indices into strokes[]",
+        "}",
+        "",
         "export interface KanjiTemplate {",
         "  character: string;",
-        "  meaning: string;",
+        "  reading: string;       // hiragana reading from Genki vocab",
         "  strokeCount: number;",
         "  strokes: number[][][]; // [stroke][point][x,y]",
+        "  radicals: RadicalGroup[];",
         "}",
         "",
         "export const KANJI_TEMPLATES: Record<string, KanjiTemplate> = {",
     ]
 
-    for char, meaning, strokes in kanji_data:
-        lines.append(f"  // {char} ({meaning})")
+    for char, reading, strokes, radical_groups in kanji_data:
+        safe_reading = escape_ts_string(reading)
+        lines.append(f"  // {char} ({reading})")
         lines.append(f"  '{char}': {{")
         lines.append(f"    character: '{char}',")
-        lines.append(f"    meaning: '{meaning}',")
+        lines.append(f"    reading: '{safe_reading}',")
         lines.append(f"    strokeCount: {len(strokes)},")
         lines.append(f"    strokes: [")
         for stroke in strokes:
             pts_str = ", ".join(f"[{p[0]}, {p[1]}]" for p in stroke)
             lines.append(f"      [{pts_str}],")
         lines.append(f"    ],")
+        lines.append(f"    radicals: [")
+        for g in radical_groups:
+            pos = f"'{g['position']}'" if g["position"] else "undefined"
+            idx_str = ", ".join(str(i) for i in g["strokeIndices"])
+            lines.append(f"      {{ element: '{g['element']}', position: {pos}, strokeIndices: [{idx_str}] }},")
+        lines.append(f"    ],")
         lines.append(f"  }},")
         lines.append("")
 
+    lines += ["};", ""]
+
+    # Lesson groups
+    lines.append("// Kanji grouped by Genki lesson, in curriculum order.")
+    lines.append("export const LESSON_GROUPS: Array<{ label: string; characters: string[] }> = [")
+    for label, chars in lesson_groups:
+        escaped = "".join(chars)
+        lines.append(f"  {{ label: '{label}', characters: [")
+        for ch in chars:
+            lines.append(f"    '{ch}',")
+        lines.append(f"  ] }},")
     lines += [
-        "};",
+        "];",
         "",
         "export function getTemplate(character: string): KanjiTemplate | undefined {",
         "  return KANJI_TEMPLATES[character];",
@@ -271,23 +414,40 @@ def generate_ts(kanji_data: List[Tuple[str, str, List[List[List[float]]]]]) -> s
 
 
 def main() -> None:
+    kanji_list, lesson_groups = load_kanji_from_csvs()
+    print(f"Found {len(kanji_list)} unique kanji across all CSV files.")
+
     kanji_data = []
-    for char, meaning in KANJI_LIST:
-        print(f"Fetching {char} ({meaning})... ", end="", flush=True)
+    failed = []
+    for char, reading in kanji_list:
+        print(f"Fetching {char} ({reading})... ", end="", flush=True)
         try:
             svg = fetch_kanjivg(char)
-            strokes = get_strokes_from_svg(svg)
-            print(f"✓  {len(strokes)} stroke(s)")
-            kanji_data.append((char, meaning, strokes))
+            strokes, root = get_strokes_from_svg(svg)
+            radical_groups = get_radical_groups(root, char)
+            print(f"✓  {len(strokes)} stroke(s), {len(radical_groups)} radical(s)")
+            kanji_data.append((char, reading, strokes, radical_groups))
         except Exception as e:
             print(f"✗  {e}")
+            failed.append((char, str(e)))
+
+    # Remove failed kanji from lesson groups so the TS output stays consistent
+    failed_chars = {ch for ch, _ in failed}
+    clean_groups = [
+        (label, [ch for ch in chars if ch not in failed_chars])
+        for label, chars in lesson_groups
+    ]
 
     out_path = "web-client/src/templates/kanji-data.ts"
-    ts = generate_ts(kanji_data)
+    ts = generate_ts(kanji_data, clean_groups)
     with open(out_path, "w") as f:
         f.write(ts)
 
-    print(f"\nWrote {out_path}")
+    print(f"\nWrote {len(kanji_data)} kanji to {out_path}")
+    if failed:
+        print(f"\nFailed ({len(failed)}):")
+        for char, err in failed:
+            print(f"  {char}: {err}")
 
 
 if __name__ == "__main__":
