@@ -21,7 +21,8 @@ from typing import List, Tuple
 
 KANJIVG_BASE = "https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/{}.svg"
 VIEWBOX_SIZE = 109.0
-NUM_SAMPLES = 20  # points per stroke after resampling
+POINTS_PER_UNIT = 40  # points per unit of normalized arc length (coords in [0,1])
+MIN_POINTS = 8        # floor so very short strokes still animate smoothly
 SVG_NS = "http://www.w3.org/2000/svg"
 KVG_NS = "http://kanjivg.tagaini.net"
 
@@ -226,6 +227,15 @@ def path_to_points_dense(d: str) -> List[Tuple[float, float]]:
     return points
 
 
+def arc_length(points: List[Tuple[float, float]]) -> float:
+    total = 0.0
+    for i in range(1, len(points)):
+        dx = points[i][0] - points[i - 1][0]
+        dy = points[i][1] - points[i - 1][1]
+        total += math.sqrt(dx * dx + dy * dy)
+    return total
+
+
 def resample_by_arc_length(
     points: List[Tuple[float, float]], n: int
 ) -> List[Tuple[float, float]]:
@@ -323,7 +333,9 @@ def get_strokes_from_svg(svg_text: str) -> tuple:
         if not d:
             continue
         dense = path_to_points_dense(d)
-        resampled = resample_by_arc_length(dense, NUM_SAMPLES)
+        arc_len_normalized = arc_length(dense) / VIEWBOX_SIZE
+        n = max(MIN_POINTS, round(arc_len_normalized * POINTS_PER_UNIT))
+        resampled = resample_by_arc_length(dense, n)
         normalized = [
             [round(x / VIEWBOX_SIZE, 4), round(y / VIEWBOX_SIZE, 4)]
             for x, y in resampled

@@ -50,7 +50,7 @@ class App {
   private isRecordingPlayback = false;
   private recordingAbortController: AbortController | null = null;
   private radicalsEnabled = false;
-  private playbackSpeed = 2; // multiplier; 1 = 500ms/stroke, 2 = 250ms/stroke (default snappy)
+  private playbackSpeed = 2; // multiplier applied to msPerPoint; higher = faster
 
   private selectedKanji = '';
 
@@ -223,7 +223,7 @@ class App {
       this.updateKanjiGuide();
 
       await this.templatePlayer.play(character, {
-        strokeDuration: 500 / this.playbackSpeed,
+        msPerPoint: 25 / this.playbackSpeed,
         strokePause: 150 / this.playbackSpeed,
         pressure: 0.6,
         onStrokeStart: i => {

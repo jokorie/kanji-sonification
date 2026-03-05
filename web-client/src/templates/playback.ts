@@ -56,8 +56,9 @@ function computeRadicalBoundsMap(template: KanjiTemplate): Map<number, RadicalFr
 }
 
 export interface PlaybackOptions {
-  /** Duration per stroke in milliseconds */
-  strokeDuration: number;
+  /** Milliseconds per point. Total stroke duration = msPerPoint * points.length,
+   *  so longer strokes (more points) naturally take more time. */
+  msPerPoint: number;
   /** Pause between strokes in milliseconds */
   strokePause: number;
   /** Constant pressure to use (0-1) */
@@ -73,9 +74,9 @@ export interface PlaybackOptions {
 }
 
 const DEFAULT_OPTIONS: PlaybackOptions = {
-  strokeDuration: 500,  // 500ms per stroke
-  strokePause: 200,     // 200ms pause between strokes
-  pressure: 0.6,        // Constant medium pressure
+  msPerPoint: 25,   // 25ms per point; total duration scales with stroke length
+  strokePause: 200,
+  pressure: 0.6,
 };
 
 export class TemplatePlayer {
@@ -157,8 +158,7 @@ export class TemplatePlayer {
     opts.onStrokeStart?.(strokeIndex);
     this.featureExtractor.reset();
 
-    // Calculate time per point
-    const timePerPoint = opts.strokeDuration / points.length;
+    const timePerPoint = opts.msPerPoint;
 
     // Start synth with first point
     const firstPoint = this.createStrokePoint(points[0], 0, opts.pressure, frame);
@@ -175,7 +175,7 @@ export class TemplatePlayer {
     for (let i = 0; i < points.length; i++) {
       if (!this.isPlaying) break;
 
-      const t = (i / (points.length - 1)) * (opts.strokeDuration / 1000);
+      const t = i * opts.msPerPoint / 1000;
 
       // Original coords for visualization; remapped coords for sonification
       const displayPoint = this.createStrokePoint(points[i], t, opts.pressure, null);
