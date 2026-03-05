@@ -6,7 +6,7 @@ describe('getTemplate', () => {
     const t = getTemplate('一');
     expect(t).toBeDefined();
     expect(t!.character).toBe('一');
-    expect(t!.meaning).toBe('one');
+    expect(t!.reading).toBe('いっしゅうかん');
   });
 
   it('returns undefined for an unknown character', () => {
