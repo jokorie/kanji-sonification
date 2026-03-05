@@ -115,8 +115,11 @@ export class CanvasInput {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    const nX = x / this.logicalWidth;
-    const nY = y / this.logicalHeight;
+    // Use rect.width/height (current rendered size) rather than the stored logicalWidth/Height,
+    // which may have been captured at a different layout moment (e.g. before a Safari reflow
+    // triggered by setting canvas.height on iPad).
+    const nX = x / rect.width;
+    const nY = y / rect.height;
 
     const azimuth = (e as PointerEvent & { azimuthAngle?: number }).azimuthAngle ?? 0;
     const altitude = (e as PointerEvent & { altitudeAngle?: number }).altitudeAngle ?? Math.PI / 2;
