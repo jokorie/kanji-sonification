@@ -28,6 +28,9 @@ export class CanvasInput {
   private strokeStartTime = 0;
   private currentPath: Array<{ x: number; y: number; pressure: number }> = [];
 
+  // When false, drawGuide() is a no-op — used to hide the reference during quiz draw phase.
+  showGuide = true;
+
   // Logical (CSS) pixel dimensions — kept as class state instead of stapled onto the DOM element.
   private logicalWidth = 0;
   private logicalHeight = 0;
@@ -174,6 +177,7 @@ export class CanvasInput {
   }
 
   drawGuide(strokes: number[][][], strokeColors?: string[]): void {
+    if (!this.showGuide) return;
     const defaultColor = 'rgba(201, 70, 61, 0.25)';
     const padding = 0.1;
     const scale = 1 - padding * 2;

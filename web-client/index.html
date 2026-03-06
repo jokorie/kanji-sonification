@@ -560,6 +560,263 @@
       font-size: 0.9rem;
     }
 
+    /* ── Mode toggle ── */
+    .mode-toggle {
+      display: flex;
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .mode-btn {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.6rem;
+      font-weight: 400;
+      letter-spacing: 0.1em;
+      padding: 5px 12px;
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      color: var(--ink-dim);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .mode-btn:hover {
+      background: rgba(232, 228, 220, 0.06);
+      color: var(--ink);
+    }
+
+    .mode-btn.active {
+      background: var(--accent);
+      color: var(--bg-primary);
+    }
+
+    .mode-btn:first-child {
+      border-right: 1px solid var(--border);
+    }
+
+    /* ── Quiz panel (right column, replaces kanji picker in quiz mode) ── */
+    .quiz-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .quiz-phase {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 16px 12px;
+      gap: 12px;
+    }
+
+    .quiz-panel-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.55rem;
+      color: var(--accent);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .lesson-checks {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .lesson-check-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      padding: 4px 0;
+    }
+
+    .lesson-check-item input[type="checkbox"] {
+      accent-color: var(--accent);
+      width: 13px;
+      height: 13px;
+      cursor: pointer;
+    }
+
+    .lesson-check-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--ink-dim);
+      letter-spacing: 0.05em;
+      cursor: pointer;
+    }
+
+    .quiz-start-btn {
+      margin-top: auto;
+      width: 100%;
+      padding: 10px;
+      font-size: 0.75rem;
+    }
+
+    /* Prompt phase */
+    .quiz-prompt-counter {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.55rem;
+      color: var(--ink-dim);
+      letter-spacing: 0.08em;
+    }
+
+    .quiz-prompt-meaning {
+      font-size: 1.4rem;
+      font-weight: 300;
+      color: var(--ink);
+      letter-spacing: 0.04em;
+      line-height: 1.3;
+    }
+
+    .quiz-prompt-reading {
+      font-size: 1.0rem;
+      font-weight: 300;
+      color: var(--ink-dim);
+      letter-spacing: 0.08em;
+    }
+
+    .quiz-draw-btn {
+      margin-top: auto;
+      width: 100%;
+      padding: 10px;
+      font-size: 0.75rem;
+    }
+
+    /* Draw phase */
+    .quiz-drawing-hint {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--ink-faint);
+      letter-spacing: 0.06em;
+      line-height: 1.6;
+    }
+
+    .quiz-submit-btn {
+      margin-top: auto;
+      width: 100%;
+      padding: 10px;
+      font-size: 0.75rem;
+      background: var(--accent);
+      color: var(--bg-primary);
+    }
+
+    .quiz-submit-btn:hover {
+      background: #e05048;
+      color: var(--bg-primary);
+    }
+
+    /* Reveal phase */
+    .quiz-score-display {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+    }
+
+    .quiz-correct-btn {
+      width: 100%;
+      padding: 10px;
+      font-size: 0.75rem;
+      background: rgba(74, 156, 109, 0.15);
+      border-color: var(--success);
+      color: var(--success);
+    }
+
+    .quiz-correct-btn:hover {
+      background: var(--success);
+      color: var(--bg-primary);
+      border-color: var(--success);
+    }
+
+    .quiz-incorrect-btn {
+      width: 100%;
+      padding: 10px;
+      font-size: 0.75rem;
+      background: rgba(201, 70, 61, 0.1);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .quiz-incorrect-btn:hover {
+      background: var(--accent);
+      color: var(--bg-primary);
+    }
+
+    /* ── Quiz source word display ── */
+    .quiz-source-word {
+      font-family: 'Noto Serif JP', serif;
+      font-size: 1.6rem;
+      font-weight: 400;
+      line-height: 1;
+      letter-spacing: 0.05em;
+    }
+
+    .quiz-source-target {
+      color: var(--accent);
+    }
+
+    .quiz-source-blank {
+      color: var(--accent);
+      border-bottom: 2px solid var(--accent);
+      min-width: 0.9em;
+      display: inline-block;
+    }
+
+    .quiz-source-context {
+      color: var(--ink-dim);
+    }
+
+    /* ── Quiz info states ── */
+    .kanji-display.quiz-hidden {
+      color: var(--ink-faint);
+    }
+
+    /* ── Session summary modal ── */
+    .summary-score {
+      font-size: 3rem;
+      font-weight: 300;
+      color: var(--accent);
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .summary-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--ink-dim);
+      letter-spacing: 0.08em;
+      margin-bottom: 24px;
+    }
+
+    .modal-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .modal-secondary-btn {
+      background: transparent;
+      border-color: var(--border);
+      color: var(--ink-dim);
+    }
+
+    .modal-secondary-btn:hover {
+      background: rgba(232, 228, 220, 0.06);
+      color: var(--ink);
+      border-color: var(--ink-dim);
+    }
+
     /* ── Responsive ── */
     @media (max-width: 600px) {
       header, footer {
@@ -612,6 +869,10 @@
 <body>
   <header>
     <div class="logo">KANJI <span>端末</span></div>
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="practiceModeBtn">PRACTICE</button>
+      <button class="mode-btn" id="quizModeBtn">QUIZ</button>
+    </div>
     <div class="status">
       <div class="status-dot" id="statusDot"></div>
       <span id="statusText">TAP TO START</span>
@@ -656,9 +917,53 @@
       </div>
     </div>
 
-    <!-- Right column: kanji picker, one column per lesson -->
+    <!-- Right column: kanji picker (practice) or quiz panel (quiz) -->
     <div class="main-right">
       <div class="kanji-picker" id="kanjiPicker"></div>
+
+      <!-- Quiz panel — shown only in quiz mode -->
+      <div class="quiz-panel hidden" id="quizPanel">
+
+        <!-- Phase: idle — lesson selector -->
+        <div class="quiz-phase" id="quizPhaseIdle">
+          <div class="quiz-panel-title">SELECT LESSONS</div>
+          <div class="lesson-checks" id="lessonChecks"></div>
+          <button class="quiz-start-btn" id="startQuizBtn">START QUIZ</button>
+        </div>
+
+        <!-- Phase: prompt — show meaning + reading -->
+        <div class="quiz-phase hidden" id="quizPhasePrompt">
+          <div class="quiz-panel-title">QUIZ</div>
+          <div class="quiz-prompt-counter" id="quizCounter">1 / 20</div>
+          <div id="quizSourceWordPrompt"></div>
+          <div class="quiz-prompt-reading" id="quizReading">—</div>
+          <div class="quiz-prompt-meaning" id="quizMeaning">—</div>
+          <button class="quiz-draw-btn" id="startDrawingBtn">START DRAWING</button>
+        </div>
+
+        <!-- Phase: draw — drawing in progress -->
+        <div class="quiz-phase hidden" id="quizPhaseDraw">
+          <div class="quiz-panel-title">DRAWING</div>
+          <div class="quiz-prompt-counter" id="quizCounterDraw">1 / 20</div>
+          <div id="quizSourceWordDraw"></div>
+          <div class="quiz-prompt-reading" id="quizReadingDraw">—</div>
+          <div class="quiz-prompt-meaning" id="quizMeaningDraw">—</div>
+          <div class="quiz-drawing-hint">Draw on the canvas.<br>No reference shown.</div>
+          <button class="quiz-submit-btn" id="submitDrawingBtn">DONE →</button>
+        </div>
+
+        <!-- Phase: reveal — show reference, self-report -->
+        <div class="quiz-phase hidden" id="quizPhaseReveal">
+          <div class="quiz-panel-title">HOW DID YOU DO?</div>
+          <div class="quiz-score-display" id="quizScoreDisplay">0 / 0</div>
+          <div id="quizSourceWordReveal"></div>
+          <div class="quiz-prompt-reading" id="quizReadingReveal">—</div>
+          <div class="quiz-prompt-meaning" id="quizMeaningReveal">—</div>
+          <button class="quiz-correct-btn" id="correctBtn">✓ CORRECT</button>
+          <button class="quiz-incorrect-btn" id="incorrectBtn">✗ INCORRECT</button>
+        </div>
+
+      </div>
     </div>
   </div>
 
@@ -685,6 +990,18 @@
       <button id="clearBtn">CLEAR</button>
     </div>
   </footer>
+
+  <!-- Session summary modal -->
+  <div class="modal" id="summaryModal">
+    <div class="modal-content">
+      <div class="summary-score" id="summaryScore">—</div>
+      <div class="summary-label" id="summaryLabel">correct</div>
+      <div class="modal-actions">
+        <button id="tryAgainBtn">TRY AGAIN</button>
+        <button class="modal-secondary-btn" id="backToPracticeBtn">BACK TO PRACTICE</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Audio initialization modal (required due to browser autoplay policy) -->
   <div class="modal visible" id="initModal">

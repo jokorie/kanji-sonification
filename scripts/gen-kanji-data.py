@@ -27,6 +27,23 @@ SVG_NS = "http://www.w3.org/2000/svg"
 KVG_NS = "http://kanjivg.tagaini.net"
 
 KANJI_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "kanji")
+KANJI_DATA_URL = "https://raw.githubusercontent.com/davidluzgouveia/kanji-data/master/kanji.json"
+
+
+def fetch_kanji_meanings() -> dict[str, str]:
+    """
+    Fetch a kanji→English meaning map from the davidluzgouveia/kanji-data JSON.
+    Returns the first listed meaning (lowercase) for each kanji.
+    """
+    import json
+    with urllib.request.urlopen(KANJI_DATA_URL) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    result = {}
+    for char, entry in data.items():
+        meanings = entry.get("meanings", [])
+        if meanings:
+            result[char] = meanings[0].lower()
+    return result
 
 
 def is_kanji(ch: str) -> bool:
@@ -51,17 +68,24 @@ def csv_label(fname: str) -> str:
     return f"Lesson {raw}"
 
 
-def load_kanji_from_csvs() -> tuple[List[Tuple[str, str]], List[Tuple[str, List[str]]]]:
+def load_kanji_from_csvs(
+    meanings: dict[str, str]
+) -> tuple[List[Tuple[str, str, str, str]], List[Tuple[str, List[str]]]]:
     """
     Read all kanji/*.csv files and return:
-      - A deduplicated list of (kanji_char, reading) pairs in first-seen order.
+      - A deduplicated list of (kanji_char, reading, meaning, source_word) tuples
+        in first-seen order.
       - A list of (lesson_label, [kanji_chars]) lesson groups in file order.
 
     Reading is taken from the first single-kanji entry for that character,
     falling back to the first compound entry that contains it.
+    source_word is the original CSV entry (e.g. '質問') the kanji was first seen in,
+    used in the quiz UI to highlight the tested character in context.
+    Meaning comes from the pre-loaded meanings dict.
     """
     single_readings: dict[str, str] = {}
     fallback_readings: dict[str, str] = {}
+    source_words: dict[str, str] = {}
     order: list[str] = []
     lesson_groups: list[tuple[str, list[str]]] = []
 
@@ -83,6 +107,7 @@ def load_kanji_from_csvs() -> tuple[List[Tuple[str, str]], List[Tuple[str, List[
                 for ch in kanji_chars:
                     if ch not in fallback_readings:
                         fallback_readings[ch] = reading
+                        source_words[ch] = entry
                         order.append(ch)
                         group_chars.append(ch)
                     if is_single and ch not in single_readings:
@@ -96,7 +121,9 @@ def load_kanji_from_csvs() -> tuple[List[Tuple[str, str]], List[Tuple[str, List[
         if ch not in seen:
             seen.add(ch)
             reading = single_readings.get(ch) or fallback_readings.get(ch, "")
-            all_kanji.append((ch, reading))
+            meaning = meanings.get(ch, "")
+            source_word = source_words.get(ch, ch)
+            all_kanji.append((ch, reading, meaning, source_word))
 
     return all_kanji, lesson_groups
 
@@ -369,6 +396,8 @@ def generate_ts(kanji_data: list, lesson_groups: List[Tuple[str, List[str]]]) ->
         "export interface KanjiTemplate {",
         "  character: string;",
         "  reading: string;       // hiragana reading from Genki vocab",
+        "  meaning: string;       // primary English meaning",
+        "  sourceWord: string;    // original vocab entry (e.g. '質問' for 問), used to show context in quiz",
         "  strokeCount: number;",
         "  strokes: number[][][]; // [stroke][point][x,y]",
         "  radicals: RadicalGroup[];",
@@ -377,12 +406,16 @@ def generate_ts(kanji_data: list, lesson_groups: List[Tuple[str, List[str]]]) ->
         "export const KANJI_TEMPLATES: Record<string, KanjiTemplate> = {",
     ]
 
-    for char, reading, strokes, radical_groups in kanji_data:
+    for char, reading, meaning, source_word, strokes, radical_groups in kanji_data:
         safe_reading = escape_ts_string(reading)
-        lines.append(f"  // {char} ({reading})")
+        safe_meaning = escape_ts_string(meaning)
+        safe_source = escape_ts_string(source_word)
+        lines.append(f"  // {char} ({reading}) — {meaning}")
         lines.append(f"  '{char}': {{")
         lines.append(f"    character: '{char}',")
         lines.append(f"    reading: '{safe_reading}',")
+        lines.append(f"    meaning: '{safe_meaning}',")
+        lines.append(f"    sourceWord: '{safe_source}',")
         lines.append(f"    strokeCount: {len(strokes)},")
         lines.append(f"    strokes: [")
         for stroke in strokes:
@@ -426,19 +459,23 @@ def generate_ts(kanji_data: list, lesson_groups: List[Tuple[str, List[str]]]) ->
 
 
 def main() -> None:
-    kanji_list, lesson_groups = load_kanji_from_csvs()
+    print("Fetching kanji meanings... ", end="", flush=True)
+    meanings = fetch_kanji_meanings()
+    print(f"✓  {len(meanings)} entries loaded.")
+
+    kanji_list, lesson_groups = load_kanji_from_csvs(meanings)
     print(f"Found {len(kanji_list)} unique kanji across all CSV files.")
 
     kanji_data = []
     failed = []
-    for char, reading in kanji_list:
+    for char, reading, meaning, source_word in kanji_list:
         print(f"Fetching {char} ({reading})... ", end="", flush=True)
         try:
             svg = fetch_kanjivg(char)
             strokes, root = get_strokes_from_svg(svg)
             radical_groups = get_radical_groups(root, char)
             print(f"✓  {len(strokes)} stroke(s), {len(radical_groups)} radical(s)")
-            kanji_data.append((char, reading, strokes, radical_groups))
+            kanji_data.append((char, reading, meaning, source_word, strokes, radical_groups))
         except Exception as e:
             print(f"✗  {e}")
             failed.append((char, str(e)))

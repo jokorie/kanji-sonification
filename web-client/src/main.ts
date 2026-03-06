@@ -10,7 +10,7 @@ import { mapFeaturesToSynthParams, yToPitch, forceToAmplitude } from './audio/ma
 import { KanjiSynth } from './audio/synth';
 import { CanvasInput } from './canvas/input';
 import { TemplatePlayer } from './templates/playback';
-import { KanjiTemplate, getTemplate, LESSON_GROUPS } from './templates/kanji-data';
+import { KanjiTemplate, getTemplate, KANJI_TEMPLATES, LESSON_GROUPS } from './templates/kanji-data';
 
 // Palette for radical coloring — cycles if a kanji has more radicals than entries.
 const RADICAL_PALETTE = [
@@ -37,6 +37,9 @@ function buildStrokeColors(template: KanjiTemplate): string[] {
 // APP
 // ============================================================
 
+type Mode = 'practice' | 'quiz';
+type QuizPhase = 'idle' | 'prompt' | 'draw' | 'reveal';
+
 class App {
   private synth: KanjiSynth;
   private featureExtractor: StreamingFeatureExtractor;
@@ -53,6 +56,14 @@ class App {
   private playbackSpeed = 2; // multiplier applied to msPerPoint; higher = faster
 
   private selectedKanji = '';
+
+  // Quiz state
+  private mode: Mode = 'practice';
+  private quizPhase: QuizPhase = 'idle';
+  private quizQueue: KanjiTemplate[] = [];
+  private quizIndex = 0;
+  private quizScore = { correct: 0, total: 0 };
+  private selectedLessons = new Set<string>();
 
   // DOM elements
   private statusDot: HTMLElement;
@@ -72,6 +83,40 @@ class App {
   private kunyomiText: HTMLElement;
   private meaningText: HTMLElement;
   private readingBarValue: HTMLElement;
+  // Mode toggle
+  private practiceModeBtn: HTMLButtonElement;
+  private quizModeBtn: HTMLButtonElement;
+  // Quiz panel
+  private kanjiPicker: HTMLElement;
+  private quizPanel: HTMLElement;
+  private quizPhaseIdle: HTMLElement;
+  private quizPhasePrompt: HTMLElement;
+  private quizPhaseDraw: HTMLElement;
+  private quizPhaseReveal: HTMLElement;
+  private lessonChecks: HTMLElement;
+  private startQuizBtn: HTMLButtonElement;
+  private quizCounter: HTMLElement;
+  private quizSourceWordPrompt: HTMLElement;
+  private quizMeaning: HTMLElement;
+  private quizReading: HTMLElement;
+  private startDrawingBtn: HTMLButtonElement;
+  private quizCounterDraw: HTMLElement;
+  private quizSourceWordDraw: HTMLElement;
+  private quizMeaningDraw: HTMLElement;
+  private quizReadingDraw: HTMLElement;
+  private submitDrawingBtn: HTMLButtonElement;
+  private quizScoreDisplay: HTMLElement;
+  private quizSourceWordReveal: HTMLElement;
+  private quizMeaningReveal: HTMLElement;
+  private quizReadingReveal: HTMLElement;
+  private correctBtn: HTMLButtonElement;
+  private incorrectBtn: HTMLButtonElement;
+  // Summary modal
+  private summaryModal: HTMLElement;
+  private summaryScore: HTMLElement;
+  private summaryLabel: HTMLElement;
+  private tryAgainBtn: HTMLButtonElement;
+  private backToPracticeBtn: HTMLButtonElement;
 
   constructor() {
     this.synth = new KanjiSynth(DEFAULT_SYNTH_CONFIG);
@@ -96,6 +141,40 @@ class App {
     this.kunyomiText = document.getElementById('kunyomiText')!;
     this.meaningText = document.getElementById('meaningText')!;
     this.readingBarValue = document.getElementById('readingBarValue')!;
+    // Mode toggle
+    this.practiceModeBtn = document.getElementById('practiceModeBtn') as HTMLButtonElement;
+    this.quizModeBtn = document.getElementById('quizModeBtn') as HTMLButtonElement;
+    // Quiz panel
+    this.kanjiPicker = document.getElementById('kanjiPicker')!;
+    this.quizPanel = document.getElementById('quizPanel')!;
+    this.quizPhaseIdle = document.getElementById('quizPhaseIdle')!;
+    this.quizPhasePrompt = document.getElementById('quizPhasePrompt')!;
+    this.quizPhaseDraw = document.getElementById('quizPhaseDraw')!;
+    this.quizPhaseReveal = document.getElementById('quizPhaseReveal')!;
+    this.lessonChecks = document.getElementById('lessonChecks')!;
+    this.startQuizBtn = document.getElementById('startQuizBtn') as HTMLButtonElement;
+    this.quizCounter = document.getElementById('quizCounter')!;
+    this.quizSourceWordPrompt = document.getElementById('quizSourceWordPrompt')!;
+    this.quizMeaning = document.getElementById('quizMeaning')!;
+    this.quizReading = document.getElementById('quizReading')!;
+    this.startDrawingBtn = document.getElementById('startDrawingBtn') as HTMLButtonElement;
+    this.quizCounterDraw = document.getElementById('quizCounterDraw')!;
+    this.quizSourceWordDraw = document.getElementById('quizSourceWordDraw')!;
+    this.quizMeaningDraw = document.getElementById('quizMeaningDraw')!;
+    this.quizReadingDraw = document.getElementById('quizReadingDraw')!;
+    this.submitDrawingBtn = document.getElementById('submitDrawingBtn') as HTMLButtonElement;
+    this.quizScoreDisplay = document.getElementById('quizScoreDisplay')!;
+    this.quizSourceWordReveal = document.getElementById('quizSourceWordReveal')!;
+    this.quizMeaningReveal = document.getElementById('quizMeaningReveal')!;
+    this.quizReadingReveal = document.getElementById('quizReadingReveal')!;
+    this.correctBtn = document.getElementById('correctBtn') as HTMLButtonElement;
+    this.incorrectBtn = document.getElementById('incorrectBtn') as HTMLButtonElement;
+    // Summary modal
+    this.summaryModal = document.getElementById('summaryModal')!;
+    this.summaryScore = document.getElementById('summaryScore')!;
+    this.summaryLabel = document.getElementById('summaryLabel')!;
+    this.tryAgainBtn = document.getElementById('tryAgainBtn') as HTMLButtonElement;
+    this.backToPracticeBtn = document.getElementById('backToPracticeBtn') as HTMLButtonElement;
 
     const canvas = document.getElementById('canvas') as HTMLCanvasElement;
     this.canvasInput = new CanvasInput(canvas, {
@@ -107,6 +186,7 @@ class App {
     });
 
     this.buildKanjiPicker();
+    this.buildLessonChecks();
     this.bindUI();
     this.updateKanjiGuide();
   }
@@ -153,6 +233,38 @@ class App {
     this.updateKanjiGuide();
   }
 
+  private buildLessonChecks(): void {
+    // Select all lessons by default
+    for (const { label } of LESSON_GROUPS) {
+      this.selectedLessons.add(label);
+    }
+
+    for (const { label } of LESSON_GROUPS) {
+      const item = document.createElement('label');
+      item.className = 'lesson-check-item';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = true;
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) {
+          this.selectedLessons.add(label);
+        } else {
+          this.selectedLessons.delete(label);
+        }
+        this.startQuizBtn.disabled = this.selectedLessons.size === 0;
+      });
+
+      const labelText = document.createElement('span');
+      labelText.className = 'lesson-check-label';
+      labelText.textContent = label.replace('Lessons ', 'L').replace('Lesson ', 'L');
+
+      item.appendChild(checkbox);
+      item.appendChild(labelText);
+      this.lessonChecks.appendChild(item);
+    }
+  }
+
   // ============================================================
   // UI BINDING
   // ============================================================
@@ -188,6 +300,27 @@ class App {
         this.statusText.textContent = 'AUDIO ERROR';
       }
     });
+
+    // Mode toggle
+    this.practiceModeBtn.addEventListener('click', () => this.switchMode('practice'));
+    this.quizModeBtn.addEventListener('click', () => this.switchMode('quiz'));
+
+    // Quiz phase buttons
+    this.startQuizBtn.addEventListener('click', () => this.startQuiz());
+    this.startDrawingBtn.addEventListener('click', () => this.startDrawing());
+    this.submitDrawingBtn.addEventListener('click', () => this.submitDrawing());
+    this.correctBtn.addEventListener('click', () => this.recordResult(true));
+    this.incorrectBtn.addEventListener('click', () => this.recordResult(false));
+
+    // Summary modal buttons
+    this.tryAgainBtn.addEventListener('click', () => {
+      this.summaryModal.classList.remove('visible');
+      this.switchMode('quiz');
+    });
+    this.backToPracticeBtn.addEventListener('click', () => {
+      this.summaryModal.classList.remove('visible');
+      this.switchMode('practice');
+    });
   }
 
   // ============================================================
@@ -203,6 +336,7 @@ class App {
   }
 
   private async handlePlayBtn(): Promise<void> {
+    if (this.mode === 'quiz') return;
     const character = this.selectedKanji;
     if (!character) {
       console.warn('No kanji selected for template playback.');
@@ -250,6 +384,7 @@ class App {
   }
 
   private async handleReplayBtn(): Promise<void> {
+    if (this.mode === 'quiz') return;
     if (this.isRecordingPlayback) {
       this.stopRecordingPlayback();
       return;
@@ -395,10 +530,198 @@ class App {
   }
 
   // ============================================================
+  // QUIZ
+  // ============================================================
+
+  private switchMode(mode: Mode): void {
+    this.mode = mode;
+
+    const isPractice = mode === 'practice';
+    this.practiceModeBtn.classList.toggle('active', isPractice);
+    this.quizModeBtn.classList.toggle('active', !isPractice);
+
+    this.kanjiPicker.classList.toggle('hidden', !isPractice);
+    this.quizPanel.classList.toggle('hidden', isPractice);
+
+    if (isPractice) {
+      // Restore practice state
+      this.canvasInput.showGuide = true;
+      this.updateKanjiGuide();
+      this.quizPhase = 'idle';
+    } else {
+      // Enter quiz mode at idle phase
+      this.quizPhase = 'idle';
+      this.showQuizPhase('idle');
+      this.canvasInput.clear();
+      this.clearInfoPanels();
+    }
+  }
+
+  private showQuizPhase(phase: QuizPhase): void {
+    this.quizPhaseIdle.classList.toggle('hidden', phase !== 'idle');
+    this.quizPhasePrompt.classList.toggle('hidden', phase !== 'prompt');
+    this.quizPhaseDraw.classList.toggle('hidden', phase !== 'draw');
+    this.quizPhaseReveal.classList.toggle('hidden', phase !== 'reveal');
+    this.quizPhase = phase;
+  }
+
+  private startQuiz(): void {
+    // Build shuffled queue from selected lessons
+    const chars = new Set<string>();
+    for (const { label, characters } of LESSON_GROUPS) {
+      if (this.selectedLessons.has(label)) {
+        for (const ch of characters) chars.add(ch);
+      }
+    }
+
+    const templates = [...chars]
+      .map(ch => KANJI_TEMPLATES[ch])
+      .filter((t): t is KanjiTemplate => !!t && !!t.meaning);
+
+    // Fisher-Yates shuffle
+    for (let i = templates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [templates[i], templates[j]] = [templates[j], templates[i]];
+    }
+
+    this.quizQueue = templates;
+    this.quizIndex = 0;
+    this.quizScore = { correct: 0, total: 0 };
+
+    this.showNextPrompt();
+  }
+
+  // hideTarget=true for prompt/draw (don't reveal the kanji); false for reveal.
+  private renderSourceWord(
+    container: HTMLElement,
+    sourceWord: string,
+    targetChar: string,
+    hideTarget: boolean,
+  ): void {
+    container.innerHTML = '';
+    container.className = 'quiz-source-word';
+    for (const ch of sourceWord) {
+      const span = document.createElement('span');
+      if (ch === targetChar) {
+        if (hideTarget) {
+          span.textContent = '\u00a0'; // non-breaking space — blank space under the underline
+          span.className = 'quiz-source-blank';
+        } else {
+          span.textContent = ch;
+          span.className = 'quiz-source-target';
+        }
+      } else {
+        span.textContent = ch;
+        span.className = 'quiz-source-context';
+      }
+      container.appendChild(span);
+    }
+  }
+
+  private showNextPrompt(): void {
+    if (this.quizIndex >= this.quizQueue.length) {
+      this.showSummary();
+      return;
+    }
+
+    const template = this.quizQueue[this.quizIndex];
+    const counter = `${this.quizIndex + 1} / ${this.quizQueue.length}`;
+
+    this.quizCounter.textContent = counter;
+    this.renderSourceWord(this.quizSourceWordPrompt, template.sourceWord, template.character, true);
+    this.quizReading.textContent = template.reading;
+    this.quizMeaning.textContent = template.meaning;
+
+    this.canvasInput.showGuide = false;
+    this.canvasInput.clear();
+    this.showQuizInfoPrompt(template);
+    this.showQuizPhase('prompt');
+  }
+
+  private startDrawing(): void {
+    const template = this.quizQueue[this.quizIndex];
+    const counter = `${this.quizIndex + 1} / ${this.quizQueue.length}`;
+
+    this.quizCounterDraw.textContent = counter;
+    this.renderSourceWord(this.quizSourceWordDraw, template.sourceWord, template.character, true);
+    this.quizReadingDraw.textContent = template.reading;
+    this.quizMeaningDraw.textContent = template.meaning;
+
+    // Clear the canvas and keep guide hidden
+    this.canvasInput.showGuide = false;
+    this.canvasInput.clear();
+    this.showQuizPhase('draw');
+  }
+
+  private submitDrawing(): void {
+    const template = this.quizQueue[this.quizIndex];
+
+    this.quizScoreDisplay.textContent = `${this.quizScore.correct} / ${this.quizScore.total} correct`;
+    this.renderSourceWord(this.quizSourceWordReveal, template.sourceWord, template.character, false);
+    this.quizReadingReveal.textContent = template.reading;
+    this.quizMeaningReveal.textContent = template.meaning;
+
+    // Show the reference guide
+    this.canvasInput.showGuide = true;
+    const colors = this.radicalsEnabled ? buildStrokeColors(template) : undefined;
+    this.canvasInput.drawGuide(template.strokes, colors);
+
+    this.showQuizInfoReveal(template);
+    this.showQuizPhase('reveal');
+  }
+
+  private recordResult(correct: boolean): void {
+    this.quizScore.total++;
+    if (correct) this.quizScore.correct++;
+    this.quizIndex++;
+    this.canvasInput.showGuide = false;
+    this.showNextPrompt();
+  }
+
+  private showSummary(): void {
+    const { correct, total } = this.quizScore;
+    this.summaryScore.textContent = `${correct} / ${total}`;
+    this.summaryLabel.textContent = `correct  ·  ${Math.round((correct / total) * 100)}%`;
+    this.summaryModal.classList.add('visible');
+    this.showQuizPhase('idle');
+  }
+
+  // Sets the center info panel to quiz prompt state (meaning + reading, no character)
+  private showQuizInfoPrompt(template: KanjiTemplate): void {
+    this.infoTop.classList.remove('empty');
+    this.kanjiDisplay.classList.add('empty');
+    this.kanjiDisplay.classList.add('quiz-hidden');
+    this.kanjiDisplay.textContent = '';
+    this.onyomiText.textContent = '—';
+    this.kunyomiText.textContent = template.reading || '—';
+    this.meaningText.textContent = template.meaning || '';
+    this.readingBarValue.classList.remove('empty');
+    this.readingBarValue.textContent = template.reading || '—';
+  }
+
+  // Sets the center info panel to reveal state (shows character)
+  private showQuizInfoReveal(template: KanjiTemplate): void {
+    this.infoTop.classList.remove('empty');
+    this.kanjiDisplay.classList.remove('empty');
+    this.kanjiDisplay.classList.remove('quiz-hidden');
+    this.kanjiDisplay.textContent = template.character;
+    this.onyomiText.textContent = '—';
+    this.kunyomiText.textContent = template.reading || '—';
+    this.meaningText.textContent = template.meaning || '';
+    this.readingBarValue.classList.remove('empty');
+    this.readingBarValue.textContent = template.reading || '—';
+  }
+
+  // ============================================================
   // HELPERS
   // ============================================================
 
   private updateKanjiGuide(): void {
+    // In quiz draw/prompt phase the guide is intentionally suppressed.
+    if (this.quizPhase === 'draw' || this.quizPhase === 'prompt') {
+      this.canvasInput.showGuide = false;
+    }
+
     const character = this.selectedKanji;
     const template = getTemplate(character);
 
@@ -415,10 +738,11 @@ class App {
   private updateInfoPanels(template: KanjiTemplate): void {
     this.infoTop.classList.remove('empty');
     this.kanjiDisplay.classList.remove('empty');
+    this.kanjiDisplay.classList.remove('quiz-hidden');
     this.kanjiDisplay.textContent = template.character;
     this.onyomiText.textContent = '—';
     this.kunyomiText.textContent = template.reading || '—';
-    this.meaningText.textContent = '';
+    this.meaningText.textContent = template.meaning || '';
 
     this.readingBarValue.classList.remove('empty');
     this.readingBarValue.textContent = template.reading || '—';
@@ -427,6 +751,7 @@ class App {
   private clearInfoPanels(): void {
     this.infoTop.classList.add('empty');
     this.kanjiDisplay.classList.add('empty');
+    this.kanjiDisplay.classList.remove('quiz-hidden');
     this.kanjiDisplay.textContent = '漢';
     this.onyomiText.textContent = '—';
     this.kunyomiText.textContent = '—';
