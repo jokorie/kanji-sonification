@@ -817,6 +817,77 @@
       border-color: var(--ink-dim);
     }
 
+    /* ── Identify overlay ── */
+    .identify-modal .modal-content {
+      min-width: 240px;
+      text-align: center;
+    }
+
+    .identify-char {
+      font-family: 'Noto Serif JP', serif;
+      font-size: 5rem;
+      font-weight: 400;
+      color: var(--ink);
+      line-height: 1;
+      margin-bottom: 12px;
+    }
+
+    .identify-reading {
+      font-size: 1.1rem;
+      font-weight: 300;
+      color: var(--ink-dim);
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+
+    .identify-meaning {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--accent);
+      letter-spacing: 0.06em;
+      margin-bottom: 24px;
+    }
+
+    .identify-note {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--ink-faint);
+      letter-spacing: 0.06em;
+      margin-bottom: 24px;
+    }
+
+    .identify-loading {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--ink-dim);
+      letter-spacing: 0.1em;
+      padding: 24px 0;
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    .identify-error {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--accent);
+      letter-spacing: 0.06em;
+      padding: 16px 0 24px;
+      line-height: 1.6;
+    }
+
+    .identify-setup {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--ink-dim);
+      letter-spacing: 0.04em;
+      padding: 8px 0 24px;
+      line-height: 1.8;
+      text-align: left;
+    }
+
+    .identify-setup code {
+      color: var(--accent);
+    }
+
     /* ── Responsive ── */
     @media (max-width: 600px) {
       header, footer {
@@ -988,8 +1059,17 @@
       <button id="replayBtn" class="play-btn">↺ REPLAY</button>
       <button id="radicalsBtn">RADICALS</button>
       <button id="clearBtn">CLEAR</button>
+      <button id="identifyBtn">IDENTIFY</button>
     </div>
   </footer>
+
+  <!-- Identify modal -->
+  <div class="modal identify-modal" id="identifyModal">
+    <div class="modal-content">
+      <div id="identifyResult"></div>
+      <button id="identifyCloseBtn">CLOSE</button>
+    </div>
+  </div>
 
   <!-- Session summary modal -->
   <div class="modal" id="summaryModal">

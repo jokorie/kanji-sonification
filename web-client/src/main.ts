@@ -117,6 +117,10 @@ class App {
   private summaryLabel: HTMLElement;
   private tryAgainBtn: HTMLButtonElement;
   private backToPracticeBtn: HTMLButtonElement;
+  // Identify
+  private identifyBtn: HTMLButtonElement;
+  private identifyModal: HTMLElement;
+  private identifyResult: HTMLElement;
 
   constructor() {
     this.synth = new KanjiSynth(DEFAULT_SYNTH_CONFIG);
@@ -175,6 +179,10 @@ class App {
     this.summaryLabel = document.getElementById('summaryLabel')!;
     this.tryAgainBtn = document.getElementById('tryAgainBtn') as HTMLButtonElement;
     this.backToPracticeBtn = document.getElementById('backToPracticeBtn') as HTMLButtonElement;
+    // Identify
+    this.identifyBtn = document.getElementById('identifyBtn') as HTMLButtonElement;
+    this.identifyModal = document.getElementById('identifyModal')!;
+    this.identifyResult = document.getElementById('identifyResult')!;
 
     const canvas = document.getElementById('canvas') as HTMLCanvasElement;
     this.canvasInput = new CanvasInput(canvas, {
@@ -320,6 +328,15 @@ class App {
     this.backToPracticeBtn.addEventListener('click', () => {
       this.summaryModal.classList.remove('visible');
       this.switchMode('practice');
+    });
+
+    // Identify
+    this.identifyBtn.addEventListener('click', () => this.identifyKanji());
+    this.identifyModal.addEventListener('click', e => {
+      if (e.target === this.identifyModal) this.identifyModal.classList.remove('visible');
+    });
+    document.getElementById('identifyCloseBtn')!.addEventListener('click', () => {
+      this.identifyModal.classList.remove('visible');
     });
   }
 
@@ -710,6 +727,102 @@ class App {
     this.meaningText.textContent = template.meaning || '';
     this.readingBarValue.classList.remove('empty');
     this.readingBarValue.textContent = template.reading || '—';
+  }
+
+  // ============================================================
+  // IDENTIFY (Gemini Vision)
+  // ============================================================
+
+  private async identifyKanji(): Promise<void> {
+    const apiKey = (import.meta.env.VITE_GEMINI_API_KEY as string | undefined)?.trim();
+
+    this.identifyModal.classList.add('visible');
+
+    if (!apiKey) {
+      this.identifyResult.innerHTML = `
+        <div class="identify-error">No API key configured.</div>
+        <div class="identify-setup">
+          1. Get a free key at<br>
+          <code>aistudio.google.com/app/apikey</code><br><br>
+          2. Add it to<br>
+          <code>web-client/.env.local</code><br><br>
+          <code>VITE_GEMINI_API_KEY=your_key</code><br><br>
+          3. Restart the dev server.
+        </div>`;
+      return;
+    }
+
+    this.identifyResult.innerHTML = '<div class="identify-loading">IDENTIFYING...</div>';
+
+    const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+    const base64 = this.canvasToInvertedBase64(canvas);
+
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { inlineData: { mimeType: 'image/png', data: base64 } },
+                { text: 'This is a hand-drawn Japanese kanji character. What single kanji is this? Reply with only the kanji character itself — no explanation, no other text.' },
+              ],
+            }],
+          }),
+        },
+      );
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: { message?: string } }).error?.message ?? `HTTP ${res.status}`);
+      }
+
+      const data = await res.json() as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
+      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
+      // Take only the first character in case Gemini returns extras
+      const char = [...raw][0] ?? '';
+      this.showIdentifyResult(char);
+    } catch (e) {
+      this.identifyResult.innerHTML =
+        `<div class="identify-error">Recognition failed.<br>${(e as Error).message}</div>`;
+    }
+  }
+
+  private canvasToInvertedBase64(canvas: HTMLCanvasElement): string {
+    const offscreen = document.createElement('canvas');
+    offscreen.width = canvas.width;
+    offscreen.height = canvas.height;
+    const ctx = offscreen.getContext('2d')!;
+    // White base, then 'difference' blend inverts: dark bg → white, light strokes → dark
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, offscreen.width, offscreen.height);
+    ctx.globalCompositeOperation = 'difference';
+    ctx.drawImage(canvas, 0, 0);
+    return offscreen.toDataURL('image/png').split(',')[1];
+  }
+
+  private showIdentifyResult(char: string): void {
+    if (!char) {
+      this.identifyResult.innerHTML =
+        '<div class="identify-error">Could not recognise a kanji.<br>Try drawing more clearly.</div>';
+      return;
+    }
+
+    const template = getTemplate(char);
+    if (template) {
+      this.identifyResult.innerHTML = `
+        <div class="identify-char">${template.character}</div>
+        <div class="identify-reading">${template.reading}</div>
+        <div class="identify-meaning">${template.meaning}</div>`;
+    } else {
+      this.identifyResult.innerHTML = `
+        <div class="identify-char">${char}</div>
+        <div class="identify-note">Not in Genki dataset</div>`;
+    }
   }
 
   // ============================================================
